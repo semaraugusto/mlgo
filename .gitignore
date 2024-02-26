@@ -10,6 +10,8 @@ examples/mnist/trainning/data/MNIST/raw
 
 mlgo
 mlgo.bin
+*.bin
+pth.bin
 
 examples/llama/llama
 
