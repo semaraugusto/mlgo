@@ -10,10 +10,11 @@ import (
 const (
 	DEBUG = false
 
-	MAX_DIMS   = 4
-	MAX_NODES  = 4096
-	MAX_PARAMS = 16
-	MAX_OPT    = 4
+	MAX_DIMS      = 4
+	MAX_NODES     = 4096
+	MAX_PARAMS    = 16
+	MAX_OPT       = 4
+	MAX_OP_PARAMS = 4
 
 	QK = 32 // quantization
 
@@ -132,10 +133,11 @@ type Tensor struct {
 
 	isParam bool
 
-	grad *Tensor
-	Src0 *Tensor
-	Src1 *Tensor
-	opt  [MAX_OPT]*Tensor // FIXME Do we need this?
+	grad     *Tensor
+	Src0     *Tensor
+	Src1     *Tensor
+	opt      [MAX_OPT]*Tensor       // FIXME Do we need this?
+	OpParams [MAX_OP_PARAMS]float32 // FIXME Check if using float32 hurts allignment here?
 
 	TasksCount int
 
@@ -459,7 +461,7 @@ func ReluImpl(ctx *Context, a *Tensor, inplace bool) *Tensor {
 
 	result.op = OP_RELU
 	result.Src0 = a
-	result.Src1 = nil 
+	result.Src1 = nil
 
 	if isNode {
 		result.grad = DupTensor(ctx, result)
@@ -559,16 +561,16 @@ func GetRows(ctx *Context, a, b *Tensor) *Tensor {
 	return result
 }
 
-func RMSNorm(ctx *Context, a *Tensor) *Tensor {
-	return RMSNormImpl(ctx, a, false)
+func Norm(ctx *Context, a *Tensor, eps float32) *Tensor {
+	return NormImpl(ctx, a, eps, false)
 }
 
-func RMSNormInplace(ctx *Context, a *Tensor) *Tensor {
-	return RMSNormImpl(ctx, a, true)
+func NormInplace(ctx *Context, a *Tensor, eps float32) *Tensor {
+	return NormImpl(ctx, a, eps, true)
 }
 
-// //struct ggml_tensor * ggml_rms_norm_impl(
-func RMSNormImpl(ctx *Context, a *Tensor, inplace bool) *Tensor {
+// //struct ggml_tensor * ggml_norm_impl(
+func NormImpl(ctx *Context, a *Tensor, eps float32, inplace bool) *Tensor {
 	isNode := false
 
 	if !inplace && a.grad != nil {
@@ -585,6 +587,52 @@ func RMSNormImpl(ctx *Context, a *Tensor, inplace bool) *Tensor {
 	} else {
 		result = DupTensor(ctx, a)
 	}
+
+	opParams := []float32{eps}
+	result.SetOpParams(opParams)
+
+	result.op = OP_NORM
+	result.Src0 = a
+	result.Src1 = nil // TODO: maybe store epsilon here?
+
+	if isNode {
+		result.grad = DupTensor(ctx, result)
+	} else {
+		result.grad = nil
+	}
+
+	return result
+}
+
+func RMSNorm(ctx *Context, a *Tensor, eps float32) *Tensor {
+	return RMSNormImpl(ctx, a, eps, false)
+}
+
+func RMSNormInplace(ctx *Context, a *Tensor, eps float32) *Tensor {
+	return RMSNormImpl(ctx, a, eps, true)
+}
+
+// //struct ggml_tensor * ggml_rms_norm_impl(
+func RMSNormImpl(ctx *Context, a *Tensor, eps float32, inplace bool) *Tensor {
+	isNode := false
+
+	if !inplace && a.grad != nil {
+		////ASSERT(false); // TODO: implement backward
+		isNode = true
+		fmt.Printf("\n[STOP] ml.GetRows")
+		os.Exit(1)
+	}
+
+	////struct ggml_tensor * result = inplace ? ggml_view_tensor(ctx, a) : ggml_dup_tensor(ctx, a);
+	var result *Tensor
+	if inplace {
+		result = ViewTensor(ctx, a)
+	} else {
+		result = DupTensor(ctx, a)
+	}
+
+	opParams := []float32{eps}
+	a.SetOpParams(opParams)
 
 	result.op = OP_RMS_NORM
 	result.Src0 = a
@@ -1001,6 +1049,28 @@ func SetFP32(tensor *Tensor, value float32) *Tensor {
 	return tensor
 }
 
+//	static void ggml_set_op_params(struct ggml_tensor * tensor, const void * params, size_t params_size) {
+//	    GGML_ASSERT(tensor != NULL); // silence -Warray-bounds warnings
+//	    assert(params_size <= GGML_MAX_OP_PARAMS);
+//	    memcpy(tensor->op_params, params, params_size);
+//	}
+func (t *Tensor) SetOpParams(params []float32) {
+	// GGML_ASSERT(tensor != NULL); // silence -Warray-bounds warnings
+	if t != nil {
+		fmt.Printf("\n[STOP] SetOpParams : tensor is nil!")
+	}
+
+	if len(params) > MAX_OP_PARAMS {
+		fmt.Printf("\n[STOP] ScaleImpl : assertion failed")
+		os.Exit(1)
+	}
+	for i := 0; i < len(params); i++ {
+		t.OpParams[i] = &params[i]
+	}
+}
+
+// func (t *Tensor) SetOpParams(params []byte) {
+
 // ggml_scale
 func ScaleImpl(ctx *Context, a, b *Tensor, inplace bool) *Tensor {
 	////ASSERT(ggml_is_scalar(b));
@@ -1086,7 +1156,6 @@ func SoftMax(ctx *Context, a *Tensor) *Tensor {
 }
 
 // ggml_silu
-
 func SiluImpl(ctx *Context, a *Tensor, inplace bool) *Tensor {
 	////bool is_node = false;
 
@@ -1604,8 +1673,6 @@ func GraphCompute(ctx *Context, graph *Graph) {
 
 }
 
-
-
 // =======================================================================
 
 func ComputeForward(graph *Graph, params *ComputeParams, tensor *Tensor) {
@@ -1830,7 +1897,9 @@ func ComputeForwardRMSNormFP32(params *ComputeParams, src0, dst *Tensor) {
 	nb2 := dst.NB[2]
 	nb3 := dst.NB[3]
 
-	eps := 1e-5 // TODO: make this a parameter
+	// eps := 1e-5 // TODO: make this a parameter
+	// eps = float64(eps)
+	eps := float64(dst.OpParams[0])
 
 	// TODO: optimize
 	for i03 := uint32(0); i03 < ne03; i03++ {
@@ -1938,23 +2007,23 @@ func VecReluFP32(n uint32, y, x []float32) {
 
 func ComputeForwardReluFP32(params *ComputeParams, src0, dst *Tensor) {
 	// assert(params->ith == 0);
-    // assert(ggml_are_same_shape(src0, dst));
+	// assert(ggml_are_same_shape(src0, dst));
 	if !AreSameShape(src0, dst) {
 		fmt.Printf("\n[HALT] ComputeForwardReluFP32 : different shapes!")
 		os.Exit(1)
 	}
 
 	if params.Type == TASK_INIT || params.Type == TASK_FINALIZE {
-		return 
+		return
 	}
 
 	n := src0.Nrows()
 	nc := src0.NE[0]
 
 	// assert(dst->nb[0]  == sizeof(float));
-    // assert(src0->nb[0] == sizeof(float));
+	// assert(src0->nb[0] == sizeof(float));
 
-	for i := uint32(0); i < n; i++{
+	for i := uint32(0); i < n; i++ {
 		// ggml_vec_relu_f32(nc,
 		// 	(float *) ((char *) dst->data  + i*( dst->nb[1])),
 		// 	(float *) ((char *) src0->data + i*(src0->nb[1])));
@@ -2978,7 +3047,6 @@ func Init(params InitParams) {
 	////const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
 
 }
-
 
 func PrintTensor(tensor *Tensor, name string) {
 	var dt string

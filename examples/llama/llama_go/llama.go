@@ -137,6 +137,7 @@ type Model struct {
 	tokEmbeddings *ml.Tensor
 	norm          *ml.Tensor
 	output        *ml.Tensor
+	eps           float32
 
 	layers []Layer
 	kvSelf KVCache // key + value cache for the self attention
@@ -157,6 +158,7 @@ func NewModel() *Model {
 			rotCount:    64,
 			f16:         1,
 		},
+		eps:     1e-5,
 		layers:  make([]Layer, 0),
 		tensors: make(map[string]*ml.Tensor),
 		kvSelf: KVCache{
@@ -249,7 +251,7 @@ func Eval(
 		cur := &ml.Tensor{}
 
 		// norm
-		cur = ml.RMSNorm(ctx0, inpL)
+		cur = ml.RMSNorm(ctx0, inpL, model.eps)
 
 		// cur = attention_norm*cur
 		rep := ml.Repeat(ctx0, model.layers[il].attentionNorm, cur)
@@ -353,7 +355,7 @@ func Eval(
 		{
 			// norm
 			{
-				cur = ml.RMSNorm(ctx0, inpFF)
+				cur = ml.RMSNorm(ctx0, inpFF, model.eps)
 
 				// cur = ffn_norm*cur
 				cur = ml.Mul(ctx0,
@@ -391,7 +393,7 @@ func Eval(
 
 	// --- norm
 
-	inpL = ml.RMSNorm(ctx0, inpL)
+	inpL = ml.RMSNorm(ctx0, inpL, model.eps)
 
 	// inpL = norm*inpL
 	inpL = ml.Mul(ctx0,
@@ -796,7 +798,6 @@ func SampleTopPTopK(
 //   - tokens:    new batch of tokens to process
 //   - n_past:    the context size so far
 //   - n_threads: number of threads to use
-//
 func ExpandGraph(
 
 	lctx *Context,
@@ -841,7 +842,7 @@ func ExpandGraph(
 		cur := &ml.Tensor{}
 
 		// norm
-		cur = ml.RMSNorm(ctx0, inpL)
+		cur = ml.RMSNorm(ctx0, inpL, model.eps)
 
 		// cur = attention_norm*cur
 		rep := ml.Repeat(ctx0, model.layers[il].attentionNorm, cur)
@@ -945,7 +946,7 @@ func ExpandGraph(
 		{
 			// norm
 			{
-				cur = ml.RMSNorm(ctx0, inpFF)
+				cur = ml.RMSNorm(ctx0, inpFF, model.eps)
 
 				// cur = ffn_norm*cur
 				cur = ml.Mul(ctx0,
@@ -983,13 +984,12 @@ func ExpandGraph(
 
 	// --- norm
 
-	inpL = ml.RMSNorm(ctx0, inpL)
+	inpL = ml.RMSNorm(ctx0, inpL, model.eps)
 
 	// inpL = norm*inpL
 	inpL = ml.Mul(ctx0,
 		ml.Repeat(ctx0, model.norm, inpL),
 		inpL)
-
 
 	// lm_head
 	inpL = ml.MulMat(ctx0, model.output, inpL)
@@ -1008,7 +1008,6 @@ func ExpandGraph(
 
 	return &graph, ctx0, nil
 }
-
 
 // llama_model_load
 // load the model's weights from a file
