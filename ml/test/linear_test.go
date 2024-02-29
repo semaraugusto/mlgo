@@ -26,10 +26,10 @@ type LinearModel struct {
 	bias   *ml.Tensor
 }
 
-type TestModel struct {
-	model     *LinearModel
-	input     *ml.Tensor
-	outputput *ml.Tensor
+type TestInputs struct {
+	model  *LinearModel
+	input  *ml.Tensor
+	output *ml.Tensor
 }
 
 func parseLinearModelWeightsTxt(weights_str string, model *LinearModel) error {
@@ -118,7 +118,7 @@ func parseLinearModelWeightsTxt(weights_str string, model *LinearModel) error {
 //
 //		return nil
 //	}
-func loadHParams(model *LinearModel, nIn, nOut int) {
+func (model *LinearModel) loadHParams(nIn, nOut int) {
 	model.hparams.n_input = int32(nIn)
 	model.hparams.n_classes = int32(nOut)
 	model.hparams.loaded = true
@@ -129,7 +129,7 @@ func TestLoadHParams(t *testing.T) {
 	model := new(LinearModel)
 	const nIn = 25
 	const nOut = 10
-	loadHParams(model, nIn, nOut)
+	model.loadHParams(nIn, nOut)
 	if model.hparams.n_input != int32(nIn) {
 		t.Fatalf("Expected %d, got %d", nIn, model.hparams.n_input)
 	}
@@ -142,7 +142,7 @@ func TestLoadHParams(t *testing.T) {
 }
 
 // func loadWeights(model *LinearModel, weightsPath string, nIn, nOut int) error {
-func loadWeights(model *LinearModel, weightsPath string) error {
+func (model *LinearModel) loadWeights(weightsPath string) error {
 	if model.hparams.loaded != true {
 		return fmt.Errorf("HParams not loaded")
 	}
@@ -191,10 +191,10 @@ func TestLoadWeights(t *testing.T) {
 	model := new(LinearModel)
 	nIn := 25
 	nOut := 10
-	loadHParams(model, nIn, nOut)
+	model.loadHParams(nIn, nOut)
 
 	filePath := "models/l2_weights.txt"
-	if err := loadWeights(model, filePath); err != nil {
+	if err := model.loadWeights(filePath); err != nil {
 		t.Fatalf(err.Error())
 		return
 	}
@@ -213,8 +213,8 @@ func TestLoadWeights(t *testing.T) {
 	}
 }
 
-func loadBias(model *LinearModel, filePath string) error {
-	if model.hparams.loaded != true {
+func (m *LinearModel) loadBias(filePath string) error {
+	if m.hparams.loaded != true {
 		return fmt.Errorf("HParams not loaded")
 	}
 	file, err := os.ReadFile(filePath)
@@ -225,23 +225,17 @@ func loadBias(model *LinearModel, filePath string) error {
 	// str := string(file)
 	sep := "\n"
 	str := strings.Trim(string(file), " ")
-	// biasSplit := strings.Split(str, "\n")
 	//
-	bias, err := load1DTensor(str, sep)
+	bias, err := strToF32List(str, sep)
 	if err != nil {
 		return err
 	}
+	if len(bias) != int(m.hparams.n_classes) {
+		return fmt.Errorf("Expected %d values, got %d", m.hparams.n_classes, len(bias))
+	}
 
-	model.bias = bias
-	// model.bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.n_classes))
-	// for i := 0; i < len(model.bias.Data); i++ {
-	// 	ft32, err := strconv.ParseFloat(biasSplit[i], 32)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	model.bias.Data[i] = float32(ft32)
-	// }
-	//
+	m.bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(m.hparams.n_classes))
+	m.bias.Data = bias
 	return nil
 }
 
@@ -251,8 +245,8 @@ func TestLoadBias(t *testing.T) {
 	weightsPath := "models/l2_bias.txt"
 	const nIn = 25
 	const nOut = 10
-	loadHParams(model, nIn, nOut)
-	if err := loadBias(model, weightsPath); err != nil {
+	model.loadHParams(nIn, nOut)
+	if err := model.loadBias(weightsPath); err != nil {
 		t.Fatalf(err.Error())
 		return
 	}
@@ -283,6 +277,13 @@ func TestLoadBias(t *testing.T) {
 	}
 }
 
+func strToF32List(contents, sep string) ([]float32, error) {
+	str := strings.Trim(contents, " ")
+	strSplit := strings.Split(str, sep)
+
+	data, err := strListToF32List(strSplit)
+	return data, err
+}
 func strListToF32List(strList []string) ([]float32, error) {
 	size := len(strList)
 	if strList[size-1] == "" {
@@ -305,66 +306,124 @@ func strListToF32List(strList []string) ([]float32, error) {
 	return t, nil
 }
 
-func load1DTensor(contents string, sep string) (*ml.Tensor, error) {
-	str := strings.Trim(contents, " ")
-	strSplit := strings.Split(str, sep)
-	size := len(strSplit)
-
-	data, err := strListToF32List(strSplit)
-	if err != nil {
-		return &ml.Tensor{}, err
-	}
-
-	t := ml.NewTensor1D(nil, ml.TYPE_F32, uint32(size))
-	t.Data = data
-
-	return t, nil
-}
-
-func loadInput(model *LinearModel, filePath string) error {
-	if model.hparams.loaded != true {
-		return fmt.Errorf("HParams not loaded")
-	}
+func fileToStr(filePath string) (string, error) {
 	file, err := os.ReadFile(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	str := strings.Trim(string(file), " ")
-	fmt.Println(str)
-	sep := " "
+	return strings.Trim(string(file), " "), nil
+}
 
-	bias, err := load1DTensor(str, sep)
+func (ti *TestInputs) loadInput(filePath string) error {
+	if ti.model.hparams.loaded != true {
+		return fmt.Errorf("HParams not loaded")
+	}
+	str, err := fileToStr(filePath)
 	if err != nil {
 		return err
 	}
-	model.bias = bias
+	sep := " "
+	input, err := strToF32List(str, sep)
+	if err != nil {
+		return err
+	}
 
-	//
+	ti.input = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.n_input))
+	ti.input.Data = input
+
+	return nil
+}
+
+func (ti *TestInputs) loadOutput(filePath string) error {
+	if ti.model.hparams.loaded != true {
+		return fmt.Errorf("HParams not loaded")
+	}
+	str, err := fileToStr(filePath)
+	if err != nil {
+		return err
+	}
+	sep := " "
+	input, err := strToF32List(str, sep)
+	if err != nil {
+		return err
+	}
+	ti.output = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.n_input))
+	ti.output.Data = input
+
 	return nil
 }
 
 func TestLoadInput(t *testing.T) {
-	ml.SINGLE_THREAD = true
-	model := new(LinearModel)
-	filePath := "models/relu_out.txt"
 	const nIn = 25
 	const nOut = 10
-	loadHParams(model, nIn, nOut)
-	if err := loadInput(model, filePath); err != nil {
+	model := new(LinearModel)
+	tInputs := new(TestInputs)
+	tInputs.model = model
+	model.loadHParams(nIn, nOut)
+	expected := [nIn]float32{
+		0.000000000000000000e+00,
+		2.918797016143798828e+00,
+		0.000000000000000000e+00,
+		2.899260044097900391e+00,
+		0.000000000000000000e+00,
+		5.984142422676086426e-02,
+		4.986535906791687012e-01,
+		1.960299134254455566e+00,
+		2.902335166931152344e+00,
+		0.000000000000000000e+00,
+		0.000000000000000000e+00,
+		2.519920587539672852e+00,
+		3.270778417587280273e+00,
+		3.656535148620605469e-01,
+		0.000000000000000000e+00,
+		0.000000000000000000e+00,
+		0.000000000000000000e+00,
+		0.000000000000000000e+00,
+		3.391362905502319336e+00,
+		5.931361317634582520e-01,
+		0.000000000000000000e+00,
+		1.682612895965576172e+00,
+		1.680085539817810059e+00,
+		0.000000000000000000e+00,
+		4.993188381195068359e+00,
+	}
+	ml.SINGLE_THREAD = true
+	filePath := "models/relu_out.txt"
+
+	if err := tInputs.loadInput(filePath); err != nil {
 		t.Fatalf(err.Error())
 		return
 	}
-	// expected := [nOut]float32{
-	// 	-2.848905324935913086e-01,
-	// 	2.043375670909881592e-01,
-	// 	1.892944127321243286e-01,
-	// 	-1.301911473274230957e-01,
-	// 	1.793343722820281982e-01,
-	// 	1.507467478513717651e-01,
-	// 	-2.965211570262908936e-01,
-	// 	1.678309142589569092e-01,
-	// 	-2.104278355836868286e-01,
-	// 	1.698205918073654175e-01,
-	// }
+
+	for i := 0; i < len(tInputs.input.Data); i++ {
+		if tInputs.input.Data[i] != expected[i] {
+			t.Fatalf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], tInputs.input.Data[i])
+		}
+	}
+}
+
+func TestLoadOutput(t *testing.T) {
+	const nIn = 25
+	const nOut = 10
+	model := new(LinearModel)
+	tInputs := new(TestInputs)
+	tInputs.model = model
+	model.loadHParams(nIn, nOut)
+	expected := [nOut]float32{
+		3.339550495147705078e+00, -1.150749111175537109e+01, 9.716508984565734863e-01, -5.528323650360107422e+00, 2.966210126876831055e+00, 7.380880713462829590e-01, 3.723233222961425781e+00, -5.654765605926513672e+00, 6.697512269020080566e-01, -3.081719398498535156e+00,
+	}
+	ml.SINGLE_THREAD = true
+	filePath := "models/l2_out.txt"
+
+	if err := tInputs.loadOutput(filePath); err != nil {
+		t.Fatalf(err.Error())
+		return
+	}
+
+	for i := 0; i < len(tInputs.output.Data); i++ {
+		if tInputs.output.Data[i] != expected[i] {
+			t.Fatalf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], tInputs.input.Data[i])
+		}
+	}
 }
