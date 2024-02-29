@@ -277,6 +277,68 @@ func TestLoadBias(t *testing.T) {
 	}
 }
 
+func loadModel(m *LinearModel, weightsPath string, biasPath string) error {
+	ml.SINGLE_THREAD = true
+	model := new(LinearModel)
+	const nIn = 25
+	const nOut = 10
+	// model.loadHParams(nIn, nOut)
+	if err := model.loadWeights(weightsPath); err != nil {
+		return fmt.Errorf(err.Error())
+	}
+	if err := model.loadBias(biasPath); err != nil {
+		return fmt.Errorf(err.Error())
+		// return
+	}
+	expected := [nOut]float32{
+		-2.848905324935913086e-01,
+		2.043375670909881592e-01,
+		1.892944127321243286e-01,
+		-1.301911473274230957e-01,
+		1.793343722820281982e-01,
+		1.507467478513717651e-01,
+		-2.965211570262908936e-01,
+		1.678309142589569092e-01,
+		-2.104278355836868286e-01,
+		1.698205918073654175e-01,
+	}
+	if model.bias.Dims != 1 {
+		return fmt.Errorf("Expected 2 dimensions, got %d", model.bias.Dims)
+	}
+
+	if len(model.bias.Data) != int(model.hparams.n_classes) {
+		return fmt.Errorf("Expected 25 values, got %d", len(model.bias.Data))
+	}
+
+	for i := 0; i < len(model.bias.Data); i++ {
+		if model.bias.Data[i] != expected[i] {
+			fmt.Errorf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], model.bias.Data[i])
+		}
+	}
+	const LOADED = 75
+	expectedWeights := [LOADED]float32{
+		-2.377904802560806274e-01, 5.536662936210632324e-01, -1.078299522399902344e+00, 6.318405866622924805e-01, -8.699013590812683105e-01, -8.142797350883483887e-01, -2.761250734329223633e-01, -3.304014205932617188e-01, 3.081635236740112305e-01, -4.025681316852569580e-02, 5.408433675765991211e-01, -7.181265950202941895e-01, -6.969867348670959473e-01, -6.016466021537780762e-01, -4.845047295093536377e-01, 5.513049364089965820e-01, 6.159024834632873535e-01, -1.422609090805053711e-01, 2.319888621568679810e-01, -7.162545919418334961e-01, 1.324884742498397827e-01, 6.312111616134643555e-01, 3.444145023822784424e-01, -8.397390842437744141e-01, 4.852400124073028564e-01, 4.840023815631866455e-01, -9.432380795478820801e-01, 8.071793317794799805e-01, -7.150199413299560547e-01, -4.020605608820915222e-02, -7.737609148025512695e-01, 5.271476507186889648e-01, -9.400956034660339355e-01, 8.877672255039215088e-02, -1.434337347745895386e-01, 1.433019876480102539e+00, 6.270796060562133789e-02, -8.493579626083374023e-01, 3.317112326622009277e-01, 4.183668494224548340e-01, -5.561479330062866211e-01, -1.437873840332031250e-01, 4.098496735095977783e-01, 6.715497374534606934e-01, 4.574362337589263916e-01, 1.165987133979797363e+00, -3.557277321815490723e-01, -9.827654361724853516e-01, 3.027272522449493408e-01, -6.643827557563781738e-01,
+		2.798346579074859619e-01, 4.990698397159576416e-02, -2.478509694337844849e-01, -6.024796366691589355e-01, 7.464453577995300293e-02, -3.927443325519561768e-01, -1.801786571741104126e-01, 4.111442267894744873e-01, 5.660344362258911133e-01, -3.778194785118103027e-01, -4.662587940692901611e-01, 6.136606335639953613e-01, 2.672267854213714600e-01, -9.641145169734954834e-02, 9.147436618804931641e-01, -1.941628694534301758e+00, 9.007028341293334961e-01, -1.293321251869201660e-01, -6.844352483749389648e-01, -7.810074687004089355e-01, -4.052036702632904053e-01, 3.838924467563629150e-01, 3.618322610855102539e-01, 4.628591835498809814e-01, -1.615414172410964966e-01,
+	}
+	if model.weight.Dims != 2 {
+		return fmt.Errorf("Expected 2 dimensions, got %d", model.weight.Dims)
+	}
+	if len(model.weight.Data) != 250 {
+		return fmt.Errorf("Expected 250 values, got %d", len(model.weight.Data))
+	}
+
+	// for i := 0; i < len(model.weight.Data); i++ {
+	for i := 0; i < LOADED; i++ {
+		if model.weight.Data[i] != expectedWeights[i] {
+			return fmt.Errorf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], model.weight.Data[i])
+		}
+	}
+	fmt.Println("model: ", model)
+	fmt.Println("model.weight: ", model.weight)
+	return nil
+
+}
+
 func strToF32List(contents, sep string) ([]float32, error) {
 	str := strings.Trim(contents, " ")
 	strSplit := strings.Split(str, sep)
@@ -348,7 +410,7 @@ func (ti *TestInputs) loadOutput(filePath string) error {
 	if err != nil {
 		return err
 	}
-	ti.output = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.n_input))
+	ti.output = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.n_classes))
 	ti.output.Data = input
 
 	return nil
@@ -424,6 +486,107 @@ func TestLoadOutput(t *testing.T) {
 	for i := 0; i < len(tInputs.output.Data); i++ {
 		if tInputs.output.Data[i] != expected[i] {
 			t.Fatalf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], tInputs.input.Data[i])
+		}
+	}
+}
+// func (m *LinearModel) linear_eval(threadCount int, digit []float32) int {
+func (m *LinearModel) linear_eval(threadCount int, digit []float32) []float32 {
+
+	fmt.Println("START EVAL")
+	ctx0 := &ml.Context{}
+	graph := ml.Graph{ThreadsCount: threadCount}
+	fmt.Println("m.hparams.n_input: ", m.hparams.n_input)
+
+	input := ml.NewTensor1D(ctx0, ml.TYPE_F32, uint32(m.hparams.n_input))
+	copy(input.Data, digit)
+
+	// fc1 MLP = Ax + b
+	fmt.Println("BEFORE MULMAT")
+	fmt.Println("weight: ", m.weight)
+	fmt.Println("input: ", input)
+	mulmat := ml.MulMat(ctx0, m.weight, input)
+	fmt.Println("MULMAT")
+	fc := ml.Add(ctx0, mulmat, m.bias)
+	// final := ml.Relu(ctx0, fc1)
+	fmt.Println("OPS DEFINED")
+
+	// run the computation
+	ml.BuildForwardExpand(&graph, fc)
+	ml.GraphCompute(ctx0, &graph)
+
+	ml.PrintTensor(mulmat, "mulmat")
+	ml.PrintTensor(fc, "fc")
+	// ml.PrintTensor(final, "final tensor")
+
+	return fc.Data
+
+}
+
+func TestModelLoad(t *testing.T) {
+	const nIn = 25
+	const nOut = 10
+	model := new(LinearModel)
+	tInputs := new(TestInputs)
+	model.loadHParams(nIn, nOut)
+	fmt.Println("!!model: ", model)
+	tInputs.model = model
+	biasPath := "models/l2_bias.txt"
+	weightsPath := "models/l2_weights.txt"
+	fmt.Println("tInputs.!model: ", tInputs.model)
+	if err := tInputs.model.loadWeights(weightsPath); err != nil {
+		t.Fatalf(err.Error())
+	}
+	if err := tInputs.model.loadBias(biasPath); err != nil {
+		t.Fatalf(err.Error())
+		// return
+	}
+}
+
+func TestModelEval(t *testing.T) {
+	const nIn = 25
+	const nOut = 10
+	expected := []float32 {
+		3.339550495147705078e+00, -1.150749111175537109e+01, 9.716508984565734863e-01, -5.528323650360107422e+00, 2.966210126876831055e+00, 7.380880713462829590e-01, 3.723233222961425781e+00, -5.654765605926513672e+00, 6.697512269020080566e-01, -3.081719398498535156e+00,
+	}
+	model := new(LinearModel)
+	tInputs := new(TestInputs)
+	model.loadHParams(nIn, nOut)
+	tInputs.model = model
+	biasPath := "models/l2_bias.txt"
+	weightsPath := "models/l2_weights.txt"
+	if err := tInputs.model.loadWeights(weightsPath); err != nil {
+		t.Fatalf(err.Error())
+	}
+	if err := tInputs.model.loadBias(biasPath); err != nil {
+		t.Fatalf(err.Error())
+		// return
+	}
+	inputPath := "models/relu_out.txt"
+	if err := tInputs.loadInput(inputPath); err != nil {
+		t.Fatalf(err.Error())
+		return
+	}
+	outputPath := "models/l2_out.txt"
+	if err := tInputs.loadOutput(outputPath); err != nil {
+		t.Fatalf(err.Error())
+		return
+	}
+	fmt.Println("tInputs.input: ", tInputs.input)
+	// fmt.Println("tInputs.output: ", tInputs.output)
+	fmt.Println("tInputs.model: ", tInputs.model)
+
+	for i := 0; i < len(tInputs.output.Data); i++ {
+		if tInputs.output.Data[i] != expected[i] {
+			t.Fatalf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], tInputs.input.Data[i])
+		}
+	}
+	fmt.Println("tInputs.model.weight: ", tInputs.model.weight)
+
+	pred := tInputs.model.linear_eval(1, tInputs.input.Data)
+
+	for i := 0; i < len(tInputs.output.Data); i++ {
+		if pred[i] != expected[i] {
+			t.Fatalf("ERROR: Expected: '%.18f'\nGot: '%.18f'. diff: %.18f", expected[i], pred[i], pred[i] - expected[i])
 		}
 	}
 }
