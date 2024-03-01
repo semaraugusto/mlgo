@@ -6,17 +6,19 @@ import (
 	// "errors"
 	"fmt"
 	"strconv"
+
 	// "mlgo/common"
-	"mlgo/ml"
 	"os"
 	"strings"
 	"testing"
+
+	"mlgo/ml"
 )
 
 type LinearHParams struct {
-	n_input   int32
-	n_classes int32
-	loaded    bool
+	nInput   int32
+	nClasses int32
+	loaded   bool
 }
 
 type LinearModel struct {
@@ -30,10 +32,6 @@ type TestInputs struct {
 	model  *LinearModel
 	input  *ml.Tensor
 	output *ml.Tensor
-}
-
-func parseLinearModelWeightsTxt(weights_str string, model *LinearModel) error {
-	return nil
 }
 
 //	func linearModelLoad(model *LinearModel) error {
@@ -91,12 +89,12 @@ func parseLinearModelWeightsTxt(weights_str string, model *LinearModel) error {
 //			// 	ne_weight = append(ne_weight, int32(common.ReadInt32FromFile(weightsFile)))
 //			// }
 //			// FC1 dimensions taken from file, eg. 768x500
-//			model.hparams.n_input = 25
+//			model.hparams.nInput = 25
 //			model.hparams.n_hidden = 1
-//			fmt.Println("model.hparams.n_input", model.hparams.n_input)
+//			fmt.Println("model.hparams.nInput", model.hparams.nInput)
 //			fmt.Println("model.hparams.n_hidden", model.hparams.n_hidden)
 //
-//			model.weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.n_input), uint32(model.hparams.n_hidden))
+//			model.weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.nInput), uint32(model.hparams.n_hidden))
 //			for i := 0; i < len(model.weight.Data); i++ {
 //				// model.weight.Data[i] = common.ReadFP32FromFile(weightsFile)
 //				model.weight.Data[i] = weights[i]
@@ -119,8 +117,8 @@ func parseLinearModelWeightsTxt(weights_str string, model *LinearModel) error {
 //		return nil
 //	}
 func (model *LinearModel) loadHParams(nIn, nOut int) {
-	model.hparams.n_input = int32(nIn)
-	model.hparams.n_classes = int32(nOut)
+	model.hparams.nInput = int32(nIn)
+	model.hparams.nClasses = int32(nOut)
 	model.hparams.loaded = true
 }
 
@@ -130,11 +128,11 @@ func TestLoadHParams(t *testing.T) {
 	const nIn = 25
 	const nOut = 10
 	model.loadHParams(nIn, nOut)
-	if model.hparams.n_input != int32(nIn) {
-		t.Fatalf("Expected %d, got %d", nIn, model.hparams.n_input)
+	if model.hparams.nInput != int32(nIn) {
+		t.Fatalf("Expected %d, got %d", nIn, model.hparams.nInput)
 	}
-	if model.hparams.n_classes != int32(nOut) {
-		t.Fatalf("Expected %d, got %d", nOut, model.hparams.n_classes)
+	if model.hparams.nClasses != int32(nOut) {
+		t.Fatalf("Expected %d, got %d", nOut, model.hparams.nClasses)
 	}
 	if model.hparams.loaded != true {
 		t.Fatalf("Expected %t, got %t", true, model.hparams.loaded)
@@ -156,14 +154,14 @@ func (model *LinearModel) loadWeights(weightsPath string) error {
 	weightsStr := strings.Split(str, "\n")
 
 	layerWeights := [][]string{}
-	for i := 0; i < int(model.hparams.n_classes); i++ {
+	for i := 0; i < int(model.hparams.nClasses); i++ {
 		split := strings.Split(weightsStr[i], " ")
 		layerWeights = append(layerWeights, split)
 
 	}
 
 	weights := []float32{}
-	for i := 0; i < int(model.hparams.n_classes); i++ {
+	for i := 0; i < int(model.hparams.nClasses); i++ {
 		data, err := strListToF32List(layerWeights[i])
 		if err != nil {
 			return err
@@ -172,7 +170,7 @@ func (model *LinearModel) loadWeights(weightsPath string) error {
 
 	}
 
-	model.weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.n_input), uint32(model.hparams.n_classes))
+	model.weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.nInput), uint32(model.hparams.nClasses))
 	for i := 0; i < len(model.weight.Data); i++ {
 		model.weight.Data[i] = weights[i]
 	}
@@ -213,8 +211,8 @@ func TestLoadWeights(t *testing.T) {
 	}
 }
 
-func (m *LinearModel) loadBias(filePath string) error {
-	if m.hparams.loaded != true {
+func (model *LinearModel) loadBias(filePath string) error {
+	if model.hparams.loaded != true {
 		return fmt.Errorf("HParams not loaded")
 	}
 	file, err := os.ReadFile(filePath)
@@ -230,12 +228,12 @@ func (m *LinearModel) loadBias(filePath string) error {
 	if err != nil {
 		return err
 	}
-	if len(bias) != int(m.hparams.n_classes) {
-		return fmt.Errorf("Expected %d values, got %d", m.hparams.n_classes, len(bias))
+	if len(bias) != int(model.hparams.nClasses) {
+		return fmt.Errorf("Expected %d values, got %d", model.hparams.nClasses, len(bias))
 	}
 
-	m.bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(m.hparams.n_classes))
-	m.bias.Data = bias
+	model.bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.nClasses))
+	model.bias.Data = bias
 	return nil
 }
 
@@ -266,7 +264,7 @@ func TestLoadBias(t *testing.T) {
 		t.Fatalf("Expected 2 dimensions, got %d", model.bias.Dims)
 	}
 
-	if len(model.bias.Data) != int(model.hparams.n_classes) {
+	if len(model.bias.Data) != int(model.hparams.nClasses) {
 		t.Fatalf("Expected 25 values, got %d", len(model.bias.Data))
 	}
 
@@ -277,10 +275,8 @@ func TestLoadBias(t *testing.T) {
 	}
 }
 
-func loadModel(m *LinearModel, weightsPath string, biasPath string) error {
+func loadModel(model *LinearModel, weightsPath string, biasPath string) error {
 	ml.SINGLE_THREAD = true
-	model := new(LinearModel)
-	const nIn = 25
 	const nOut = 10
 	// model.loadHParams(nIn, nOut)
 	if err := model.loadWeights(weightsPath); err != nil {
@@ -306,13 +302,13 @@ func loadModel(m *LinearModel, weightsPath string, biasPath string) error {
 		return fmt.Errorf("Expected 2 dimensions, got %d", model.bias.Dims)
 	}
 
-	if len(model.bias.Data) != int(model.hparams.n_classes) {
+	if len(model.bias.Data) != int(model.hparams.nClasses) {
 		return fmt.Errorf("Expected 25 values, got %d", len(model.bias.Data))
 	}
 
 	for i := 0; i < len(model.bias.Data); i++ {
 		if model.bias.Data[i] != expected[i] {
-			fmt.Errorf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], model.bias.Data[i])
+			return fmt.Errorf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], model.bias.Data[i])
 		}
 	}
 	const LOADED = 75
@@ -357,7 +353,7 @@ func strListToF32List(strList []string) ([]float32, error) {
 			continue
 		}
 		trimmed := strings.Trim(strList[i], " ")
-		trimmed = strings.Trim(strList[i], "\n")
+		trimmed = strings.Trim(trimmed, "\n")
 		ft32, err := strconv.ParseFloat(trimmed, 32)
 		if err != nil {
 			fmt.Println("ERROR: ", trimmed)
@@ -391,7 +387,7 @@ func (ti *TestInputs) loadInput(filePath string) error {
 		return err
 	}
 
-	ti.input = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.n_input))
+	ti.input = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.nInput))
 	ti.input.Data = input
 
 	return nil
@@ -410,7 +406,7 @@ func (ti *TestInputs) loadOutput(filePath string) error {
 	if err != nil {
 		return err
 	}
-	ti.output = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.n_classes))
+	ti.output = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(ti.model.hparams.nClasses))
 	ti.output.Data = input
 
 	return nil
@@ -489,36 +485,43 @@ func TestLoadOutput(t *testing.T) {
 		}
 	}
 }
+
 // func (m *LinearModel) linear_eval(threadCount int, digit []float32) int {
-func (m *LinearModel) linear_eval(threadCount int, digit []float32) []float32 {
+// func (model *LinearModel) linearEval(threadCount int, digit []float32) []float32 {
+func (model *LinearModel) linearEval(threadCount int, digit []float32) ([]float32, []float32) {
 
 	fmt.Println("START EVAL")
 	ctx0 := &ml.Context{}
 	graph := ml.Graph{ThreadsCount: threadCount}
-	fmt.Println("m.hparams.n_input: ", m.hparams.n_input)
+	fmt.Println("m.hparams.nInput: ", model.hparams.nInput)
 
-	input := ml.NewTensor1D(ctx0, ml.TYPE_F32, uint32(m.hparams.n_input))
+	input := ml.NewTensor1D(ctx0, ml.TYPE_F32, uint32(model.hparams.nInput))
 	copy(input.Data, digit)
 
 	// fc1 MLP = Ax + b
 	fmt.Println("BEFORE MULMAT")
-	fmt.Println("weight: ", m.weight)
+	fmt.Println("weight: ", model.weight)
 	fmt.Println("input: ", input)
-	mulmat := ml.MulMat(ctx0, m.weight, input)
+	mulmat := ml.MulMat(ctx0, model.weight, input)
 	fmt.Println("MULMAT")
-	fc := ml.Add(ctx0, mulmat, m.bias)
-	// final := ml.Relu(ctx0, fc1)
+	fc := ml.Add(ctx0, mulmat, model.bias)
+	final := ml.SoftMax(ctx0, fc)
 	fmt.Println("OPS DEFINED")
 
 	// run the computation
-	ml.BuildForwardExpand(&graph, fc)
+	// ml.BuildForwardExpand(&graph, fc)
+	ml.BuildForwardExpand(&graph, final)
 	ml.GraphCompute(ctx0, &graph)
 
-	ml.PrintTensor(mulmat, "mulmat")
-	ml.PrintTensor(fc, "fc")
+	// ml.PrintTensor(mulmat, "mulmat")
+	fmt.Println("mulmat", mulmat)
+	// ml.PrintTensor(fc, "fc")
+	fmt.Println("fc: ", fc)
 	// ml.PrintTensor(final, "final tensor")
+	// fmt.Println("final: ", final)
 
-	return fc.Data
+	return fc.Data, final.Data
+	// return fc.Data
 
 }
 
@@ -533,19 +536,22 @@ func TestModelLoad(t *testing.T) {
 	biasPath := "models/l2_bias.txt"
 	weightsPath := "models/l2_weights.txt"
 	fmt.Println("tInputs.!model: ", tInputs.model)
-	if err := tInputs.model.loadWeights(weightsPath); err != nil {
+	if err := loadModel(tInputs.model, weightsPath, biasPath); err != nil {
 		t.Fatalf(err.Error())
 	}
-	if err := tInputs.model.loadBias(biasPath); err != nil {
-		t.Fatalf(err.Error())
-		// return
-	}
+	// if err := tInputs.model.loadWeights(weightsPath); err != nil {
+	// 	t.Fatalf(err.Error())
+	// }
+	// if err := tInputs.model.loadBias(biasPath); err != nil {
+	// 	t.Fatalf(err.Error())
+	// 	// return
+	// }
 }
 
 func TestModelEval(t *testing.T) {
 	const nIn = 25
 	const nOut = 10
-	expected := []float32 {
+	expected := []float32{
 		3.339550495147705078e+00, -1.150749111175537109e+01, 9.716508984565734863e-01, -5.528323650360107422e+00, 2.966210126876831055e+00, 7.380880713462829590e-01, 3.723233222961425781e+00, -5.654765605926513672e+00, 6.697512269020080566e-01, -3.081719398498535156e+00,
 	}
 	model := new(LinearModel)
@@ -580,13 +586,38 @@ func TestModelEval(t *testing.T) {
 			t.Fatalf("ERROR: Expected: '%f'\nGot: '%f'", expected[i], tInputs.input.Data[i])
 		}
 	}
-	fmt.Println("tInputs.model.weight: ", tInputs.model.weight)
 
-	pred := tInputs.model.linear_eval(1, tInputs.input.Data)
+	// fmt.Println("tInputs.model.weight: ", tInputs.model.weight)
 
-	for i := 0; i < len(tInputs.output.Data); i++ {
-		if pred[i] != expected[i] {
-			t.Fatalf("ERROR: Expected: '%.18f'\nGot: '%.18f'. diff: %.18f", expected[i], pred[i], pred[i] - expected[i])
+	fc, pred := tInputs.model.linearEval(1, tInputs.input.Data)
+	// pred := tInputs.model.linearEval(1, tInputs.input.Data)
+	// fc := pred
+	index := 0
+	maxVal := float32(0)
+	// for p := range pred {
+	for i := 0; i < len(pred); i++ {
+		p := pred[i]
+		if p > maxVal {
+			maxVal = p
+			index = i
 		}
+	}
+
+	fmt.Println("Predicted: ", index)
+	fmt.Println("expected: ", expected)
+	fmt.Println("fc   : ", fc)
+	fmt.Println("logits   : ", pred)
+	failed := false
+	sumError := float32(0.0)
+	countError := 0
+	for i := 0; i < len(tInputs.output.Data); i++ {
+		if fc[i] != expected[i] {
+			failed = true
+			sumError += fc[i] - expected[i]
+			countError++
+		}
+	}
+	if failed {
+		t.Fatalf("ERRORS: difference in %d outputs: mean error %.10f", countError, sumError/float32(countError))
 	}
 }
