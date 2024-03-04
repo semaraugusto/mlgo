@@ -3,30 +3,31 @@ package main
 import (
 	"errors"
 	"fmt"
+
 	"mlgo/common"
 	"mlgo/ml"
 )
 
-type mnist_hparams struct{
-	n_input int32;
-	n_hidden int32;
-	n_classes int32;
+type mnist_hparams struct {
+	n_input   int32
+	n_hidden  int32
+	n_classes int32
 }
 
 type mnist_model struct {
-	hparams mnist_hparams;
+	hparams mnist_hparams
 
-	fc1_weight *ml.Tensor;
-	fc1_bias *ml.Tensor;
+	fc1_weight *ml.Tensor
+	fc1_bias   *ml.Tensor
 
-	fc2_weight *ml.Tensor;
-	fc2_bias *ml.Tensor;
-
+	fc2_weight *ml.Tensor
+	fc2_bias   *ml.Tensor
 }
 
 const (
 	READ_FROM_BIDENDIAN = true
 	OUTPUT_TO_BIDENDIAN = true
+	InputSize           = 14
 )
 
 func MIPS_mnist_model_load(model *mnist_model) error {
@@ -57,18 +58,18 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 		// FC1 dimensions taken from file, eg. 768x500
 		model.hparams.n_input = ne_weight[0]
 		model.hparams.n_hidden = ne_weight[1]
-		
+
 		if READ_FROM_BIDENDIAN {
 			fc1_weight_data_size := model.hparams.n_input * model.hparams.n_hidden
-			fc1_weight_data := common.DecodeFloat32List(model_bytes[index:index + 4 * int(fc1_weight_data_size)])
+			fc1_weight_data := common.DecodeFloat32List(model_bytes[index : index+4*int(fc1_weight_data_size)])
 			index += 4 * int(fc1_weight_data_size)
 			model.fc1_weight = ml.NewTensor2DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_input), uint32(model.hparams.n_hidden), fc1_weight_data)
 		} else {
 			model.fc1_weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.n_input), uint32(model.hparams.n_hidden))
 			fmt.Println("len(model.fc1_weight.Data): ", len(model.fc1_weight.Data))
-			for i := 0; i < len(model.fc1_weight.Data); i++{
+			for i := 0; i < len(model.fc1_weight.Data); i++ {
 				model.fc1_weight.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
-				if i % 10000 == 0 {
+				if i%10000 == 0 {
 					fmt.Println("loading fc1_weight: ", i)
 				}
 			}
@@ -83,15 +84,15 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 
 		if READ_FROM_BIDENDIAN {
 			fc1_bias_data_size := int(model.hparams.n_hidden)
-			fc1_bias_data := common.DecodeFloat32List(model_bytes[index:index + 4*fc1_bias_data_size])
-			index += 4*fc1_bias_data_size
+			fc1_bias_data := common.DecodeFloat32List(model_bytes[index : index+4*fc1_bias_data_size])
+			index += 4 * fc1_bias_data_size
 			model.fc1_bias = ml.NewTensor1DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden), fc1_bias_data)
 		} else {
 			model.fc1_bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden))
 			fmt.Println("len(model.fc1_bias.Data): ", len(model.fc1_bias.Data))
 			for i := 0; i < len(model.fc1_bias.Data); i++ {
 				model.fc1_bias.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
-				if i % 10000 == 0 {
+				if i%10000 == 0 {
 					fmt.Println("loading fc1_bias: ", i)
 				}
 			}
@@ -113,12 +114,12 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 
 		if READ_FROM_BIDENDIAN {
 			fc2_weight_data_size := int(model.hparams.n_hidden * model.hparams.n_classes)
-			fc2_weight_data := common.DecodeFloat32List(model_bytes[index:index + 4*fc2_weight_data_size])
-			index += 4*fc2_weight_data_size
+			fc2_weight_data := common.DecodeFloat32List(model_bytes[index : index+4*fc2_weight_data_size])
+			index += 4 * fc2_weight_data_size
 			model.fc2_weight = ml.NewTensor2DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden), uint32(model.hparams.n_classes), fc2_weight_data)
 		} else {
 			model.fc2_weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden), uint32(model.hparams.n_classes))
-			for i := 0; i < len(model.fc2_weight.Data); i++{
+			for i := 0; i < len(model.fc2_weight.Data); i++ {
 				model.fc2_weight.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
 			}
 		}
@@ -130,8 +131,8 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 
 		if READ_FROM_BIDENDIAN {
 			fc2_bias_data_size := int(model.hparams.n_classes)
-			fc2_bias_data := common.DecodeFloat32List(model_bytes[index:index + 4*fc2_bias_data_size])
-			index += 4*fc2_bias_data_size
+			fc2_bias_data := common.DecodeFloat32List(model_bytes[index : index+4*fc2_bias_data_size])
+			index += 4 * fc2_bias_data_size
 			model.fc2_bias = ml.NewTensor1DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_classes), fc2_bias_data)
 		} else {
 			model.fc2_bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.n_classes))
@@ -153,14 +154,15 @@ func MIPS_InputProcess() []float32 {
 	fmt.Println("start MIPS_InputProcess")
 	buf := common.ReadBytes(common.INPUT_ADDR, READ_FROM_BIDENDIAN)
 	fmt.Println("buf len: ", len(buf))
-	digits := make([]float32, 784)
-	
+	digits := make([]float32, InputSize*InputSize)
+
 	// render the digit in ASCII
 	var c string
-	for row := 0; row < 28; row++{
-		for col := 0; col < 28; col++ {
-			digits[row*28 + col] = float32(buf[row*28 + col])
-			if buf[row*28 + col] > 230 {
+	for row := 0; row < InputSize; row++ {
+		for col := 0; col < InputSize; col++ {
+			// fmt.Printf("(%d, %d), value: %.18f\n", row, col, float32(buf[row*InputSize+col]))
+			digits[row*InputSize+col] = float32(buf[row*InputSize+col]) / 255
+			if buf[row*InputSize+col] > 230 {
 				c += "*"
 			} else {
 				c += "_"
@@ -184,7 +186,8 @@ func MIPS_mnist_eval(model *mnist_model, digit []float32) int {
 	// fc1 MLP = Ax + b
 	fc1 := ml.Add(ctx0, ml.MulMat(ctx0, model.fc1_weight, input), model.fc1_bias)
 	fc2 := ml.Add(ctx0, ml.MulMat(ctx0, model.fc2_weight, ml.Relu(ctx0, fc1)), model.fc2_bias)
-	
+
+	// final := fc2
 	// softmax
 	final := ml.SoftMax(ctx0, fc2)
 
@@ -195,7 +198,7 @@ func MIPS_mnist_eval(model *mnist_model, digit []float32) int {
 	ml.PrintTensor(final, "final tensor")
 
 	maxIndex := 0
-	for i := 0; i < 10; i++{
+	for i := 0; i < 10; i++ {
 		if final.Data[i] > final.Data[maxIndex] {
 			maxIndex = i
 		}
