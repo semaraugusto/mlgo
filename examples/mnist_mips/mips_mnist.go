@@ -8,37 +8,40 @@ import (
 	"mlgo/ml"
 )
 
-type mnist_hparams struct {
-	n_input   int32
-	n_hidden  int32
-	n_classes int32
+type mnistHParams struct {
+	nInput   int32
+	nHidden  int32
+	nClasses int32
 }
 
-type mnist_model struct {
-	hparams mnist_hparams
+type mnistModel struct {
+	hparams mnistHParams
 
-	fc1_weight *ml.Tensor
-	fc1_bias   *ml.Tensor
+	fc1Weight *ml.Tensor
+	fc1Bias   *ml.Tensor
 
-	fc2_weight *ml.Tensor
-	fc2_bias   *ml.Tensor
+	fc2Weight *ml.Tensor
+	fc2Bias   *ml.Tensor
 }
 
 const (
-	READ_FROM_BIDENDIAN = true
-	OUTPUT_TO_BIDENDIAN = true
-	InputSize           = 14
+	// ReadFromBigEndian constant
+	ReadFromBigEndian = true
+	// OutputToBigEndian constant
+	OutputToBigEndian = true
+	// InputSize constant
+	InputSize = 14
 )
 
-func MIPS_mnist_model_load(model *mnist_model) error {
-	fmt.Println("start MIPS_mnist_model_load")
-	model_bytes := common.ReadBytes(common.MODEL_ADDR, READ_FROM_BIDENDIAN)
+func mipsMnistModelLoad(model *mnistModel) error {
+	fmt.Println("start MipsMnistModelLoad")
+	modelBytes := common.ReadBytes(common.MODEL_ADDR, ReadFromBigEndian)
 	index := 0
-	fmt.Println("model_bytes len: ", len(model_bytes))
+	fmt.Println("modelBytes len: ", len(modelBytes))
 
 	// verify magic
 	{
-		magic := common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
+		magic := common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian)
 		fmt.Printf("magic: %x\n", magic)
 		if magic != 0x67676d6c {
 			return errors.New("invalid model file (bad magic)")
@@ -48,52 +51,52 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 	// Read FC1 layer 1
 	{
 		fmt.Println("reading fc1")
-		n_dims := int32(common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN))
-		fmt.Println("n_dims: ", n_dims)
-		ne_weight := make([]int32, 0)
-		for i := int32(0); i < n_dims; i++ {
-			ne_weight = append(ne_weight, int32(common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)))
+		nDims := int32(common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian))
+		fmt.Println("nDims: ", nDims)
+		neWeight := make([]int32, 0)
+		for i := int32(0); i < nDims; i++ {
+			neWeight = append(neWeight, int32(common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian)))
 		}
-		fmt.Println("ne_weight: ", ne_weight)
+		fmt.Println("neWeight: ", neWeight)
 		// FC1 dimensions taken from file, eg. 768x500
-		model.hparams.n_input = ne_weight[0]
-		model.hparams.n_hidden = ne_weight[1]
+		model.hparams.nInput = neWeight[0]
+		model.hparams.nHidden = neWeight[1]
 
-		if READ_FROM_BIDENDIAN {
-			fc1_weight_data_size := model.hparams.n_input * model.hparams.n_hidden
-			fc1_weight_data := common.DecodeFloat32List(model_bytes[index : index+4*int(fc1_weight_data_size)])
-			index += 4 * int(fc1_weight_data_size)
-			model.fc1_weight = ml.NewTensor2DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_input), uint32(model.hparams.n_hidden), fc1_weight_data)
+		if ReadFromBigEndian {
+			fc1WeightDataSize := model.hparams.nInput * model.hparams.nHidden
+			fc1WeightData := common.DecodeFloat32List(modelBytes[index : index+4*int(fc1WeightDataSize)])
+			index += 4 * int(fc1WeightDataSize)
+			model.fc1Weight = ml.NewTensor2DWithData(nil, ml.TYPE_F32, uint32(model.hparams.nInput), uint32(model.hparams.nHidden), fc1WeightData)
 		} else {
-			model.fc1_weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.n_input), uint32(model.hparams.n_hidden))
-			fmt.Println("len(model.fc1_weight.Data): ", len(model.fc1_weight.Data))
-			for i := 0; i < len(model.fc1_weight.Data); i++ {
-				model.fc1_weight.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
+			model.fc1Weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.nInput), uint32(model.hparams.nHidden))
+			fmt.Println("len(model.fc1Weight.Data): ", len(model.fc1Weight.Data))
+			for i := 0; i < len(model.fc1Weight.Data); i++ {
+				model.fc1Weight.Data[i] = common.ReadFP32FromBytes(modelBytes, &index, ReadFromBigEndian)
 				if i%10000 == 0 {
-					fmt.Println("loading fc1_weight: ", i)
+					fmt.Println("loading fc1Weight: ", i)
 				}
 			}
 		}
 
 		fmt.Println("index: ", index)
 
-		ne_bias := make([]int32, 0)
-		for i := 0; i < int(n_dims); i++ {
-			ne_bias = append(ne_bias, int32(common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)))
+		neBias := make([]int32, 0)
+		for i := 0; i < int(nDims); i++ {
+			neBias = append(neBias, int32(common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian)))
 		}
 
-		if READ_FROM_BIDENDIAN {
-			fc1_bias_data_size := int(model.hparams.n_hidden)
-			fc1_bias_data := common.DecodeFloat32List(model_bytes[index : index+4*fc1_bias_data_size])
-			index += 4 * fc1_bias_data_size
-			model.fc1_bias = ml.NewTensor1DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden), fc1_bias_data)
+		if ReadFromBigEndian {
+			fc1BiasDataSize := int(model.hparams.nHidden)
+			fc1BiasData := common.DecodeFloat32List(modelBytes[index : index+4*fc1BiasDataSize])
+			index += 4 * fc1BiasDataSize
+			model.fc1Bias = ml.NewTensor1DWithData(nil, ml.TYPE_F32, uint32(model.hparams.nHidden), fc1BiasData)
 		} else {
-			model.fc1_bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden))
-			fmt.Println("len(model.fc1_bias.Data): ", len(model.fc1_bias.Data))
-			for i := 0; i < len(model.fc1_bias.Data); i++ {
-				model.fc1_bias.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
+			model.fc1Bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.nHidden))
+			fmt.Println("len(model.fc1Bias.Data): ", len(model.fc1Bias.Data))
+			for i := 0; i < len(model.fc1Bias.Data); i++ {
+				model.fc1Bias.Data[i] = common.ReadFP32FromBytes(modelBytes, &index, ReadFromBigEndian)
 				if i%10000 == 0 {
-					fmt.Println("loading fc1_bias: ", i)
+					fmt.Println("loading fc1Bias: ", i)
 				}
 			}
 		}
@@ -103,45 +106,45 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 	// Read Fc2 layer 2
 	{
 		fmt.Println("reading fc2")
-		n_dims := int32(common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN))
-		ne_weight := make([]int32, 0)
-		for i := 0; i < int(n_dims); i++ {
-			ne_weight = append(ne_weight, int32(common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)))
+		nDims := int32(common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian))
+		neWeight := make([]int32, 0)
+		for i := 0; i < int(nDims); i++ {
+			neWeight = append(neWeight, int32(common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian)))
 		}
 
 		// FC1 dimensions taken from file, eg. 10x500
-		model.hparams.n_classes = ne_weight[1]
+		model.hparams.nClasses = neWeight[1]
 
-		if READ_FROM_BIDENDIAN {
-			fc2_weight_data_size := int(model.hparams.n_hidden * model.hparams.n_classes)
-			fc2_weight_data := common.DecodeFloat32List(model_bytes[index : index+4*fc2_weight_data_size])
-			index += 4 * fc2_weight_data_size
-			model.fc2_weight = ml.NewTensor2DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden), uint32(model.hparams.n_classes), fc2_weight_data)
+		if ReadFromBigEndian {
+			fc2WeightDataSize := int(model.hparams.nHidden * model.hparams.nClasses)
+			fc2WeightData := common.DecodeFloat32List(modelBytes[index : index+4*fc2WeightDataSize])
+			index += 4 * fc2WeightDataSize
+			model.fc2Weight = ml.NewTensor2DWithData(nil, ml.TYPE_F32, uint32(model.hparams.nHidden), uint32(model.hparams.nClasses), fc2WeightData)
 		} else {
-			model.fc2_weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.n_hidden), uint32(model.hparams.n_classes))
-			for i := 0; i < len(model.fc2_weight.Data); i++ {
-				model.fc2_weight.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
+			model.fc2Weight = ml.NewTensor2D(nil, ml.TYPE_F32, uint32(model.hparams.nHidden), uint32(model.hparams.nClasses))
+			for i := 0; i < len(model.fc2Weight.Data); i++ {
+				model.fc2Weight.Data[i] = common.ReadFP32FromBytes(modelBytes, &index, ReadFromBigEndian)
 			}
 		}
 
-		ne_bias := make([]int32, 0)
-		for i := 0; i < int(n_dims); i++ {
-			ne_bias = append(ne_bias, int32(common.ReadInt32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)))
+		neBias := make([]int32, 0)
+		for i := 0; i < int(nDims); i++ {
+			neBias = append(neBias, int32(common.ReadInt32FromBytes(modelBytes, &index, ReadFromBigEndian)))
 		}
 
-		if READ_FROM_BIDENDIAN {
-			fc2_bias_data_size := int(model.hparams.n_classes)
-			fc2_bias_data := common.DecodeFloat32List(model_bytes[index : index+4*fc2_bias_data_size])
-			index += 4 * fc2_bias_data_size
-			model.fc2_bias = ml.NewTensor1DWithData(nil, ml.TYPE_F32, uint32(model.hparams.n_classes), fc2_bias_data)
+		if ReadFromBigEndian {
+			fc2BiasDataSize := int(model.hparams.nClasses)
+			fc2BiasData := common.DecodeFloat32List(modelBytes[index : index+4*fc2BiasDataSize])
+			index += 4 * fc2BiasDataSize
+			model.fc2Bias = ml.NewTensor1DWithData(nil, ml.TYPE_F32, uint32(model.hparams.nClasses), fc2BiasData)
 		} else {
-			model.fc2_bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.n_classes))
-			for i := 0; i < len(model.fc2_bias.Data); i++ {
-				model.fc2_bias.Data[i] = common.ReadFP32FromBytes(model_bytes, &index, READ_FROM_BIDENDIAN)
+			model.fc2Bias = ml.NewTensor1D(nil, ml.TYPE_F32, uint32(model.hparams.nClasses))
+			for i := 0; i < len(model.fc2Bias.Data); i++ {
+				model.fc2Bias.Data[i] = common.ReadFP32FromBytes(modelBytes, &index, ReadFromBigEndian)
 			}
 		}
 
-		ml.PrintTensor(model.fc2_bias, "model.fc2_bias")
+		ml.PrintTensor(model.fc2Bias, "model.fc2Bias")
 	}
 
 	fmt.Println("current index: ", index)
@@ -150,9 +153,9 @@ func MIPS_mnist_model_load(model *mnist_model) error {
 }
 
 // input is 784 bytes
-func MIPS_InputProcess() []float32 {
-	fmt.Println("start MIPS_InputProcess")
-	buf := common.ReadBytes(common.INPUT_ADDR, READ_FROM_BIDENDIAN)
+func mipsInputProcess() []float32 {
+	fmt.Println("start MipsInputProcess")
+	buf := common.ReadBytes(common.INPUT_ADDR, ReadFromBigEndian)
 	fmt.Println("buf len: ", len(buf))
 	digits := make([]float32, InputSize*InputSize)
 
@@ -175,17 +178,17 @@ func MIPS_InputProcess() []float32 {
 	return digits
 }
 
-func MIPS_mnist_eval(model *mnist_model, digit []float32) int {
-	fmt.Println("start MIPS_mnist_eval")
+func mipsMnistEval(model *mnistModel, digit []float32) int {
+	fmt.Println("start MIPSMnistEval")
 	ctx0 := &ml.Context{}
 	graph := ml.Graph{ThreadsCount: 1}
 
-	input := ml.NewTensor1D(ctx0, ml.TYPE_F32, uint32(model.hparams.n_input))
+	input := ml.NewTensor1D(ctx0, ml.TYPE_F32, uint32(model.hparams.nInput))
 	copy(input.Data, digit)
 
 	// fc1 MLP = Ax + b
-	fc1 := ml.Add(ctx0, ml.MulMat(ctx0, model.fc1_weight, input), model.fc1_bias)
-	fc2 := ml.Add(ctx0, ml.MulMat(ctx0, model.fc2_weight, ml.Relu(ctx0, fc1)), model.fc2_bias)
+	fc1 := ml.Add(ctx0, ml.MulMat(ctx0, model.fc1Weight, input), model.fc1Bias)
+	fc2 := ml.Add(ctx0, ml.MulMat(ctx0, model.fc2Weight, ml.Relu(ctx0, fc1)), model.fc2Bias)
 
 	// final := fc2
 	// softmax
@@ -206,21 +209,23 @@ func MIPS_mnist_eval(model *mnist_model, digit []float32) int {
 	return maxIndex
 }
 
-func MIPS_StoreInMemory(ret int) {
-	retBytes := common.IntToBytes(ret, OUTPUT_TO_BIDENDIAN)
-	common.Output(retBytes, OUTPUT_TO_BIDENDIAN)
+func mipsStoreInMemory(ret int) {
+	retBytes := common.IntToBytes(ret, OutputToBigEndian)
+	common.Output(retBytes, OutputToBigEndian)
 }
 
+// MIPS_MNIST function
 func MIPS_MNIST() {
+	// func MipsMnist() {
 	fmt.Println("Start MIPS MNIST")
-	input := MIPS_InputProcess()
-	model := new(mnist_model)
-	err := MIPS_mnist_model_load(model)
+	input := mipsInputProcess()
+	model := new(mnistModel)
+	err := mipsMnistModelLoad(model)
 	if err != nil {
 		fmt.Println(err)
 		common.Halt()
 	}
-	ret := MIPS_mnist_eval(model, input)
+	ret := mipsMnistEval(model, input)
 	fmt.Println("Predicted digit is ", ret)
-	MIPS_StoreInMemory(ret)
+	mipsStoreInMemory(ret)
 }
