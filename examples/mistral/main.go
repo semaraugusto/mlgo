@@ -210,16 +210,22 @@ func main() {
 				embd = append(llama.ExtractTokens(lastNTokens.Move(-int(leftCount/2)), int(leftCount/2)), embd...)
 			}
 
-			// fmt.Printf("[INFO] Evaluating with len %d\n", uint32(len(embd)))
+			// fmt.Printf("\n[INFO] Evaluating with len %d", uint32(len(embd)))
 			if err := llama.Eval(ctx, embd, uint32(len(embd)), pastCount, params.threadsCount); err != nil {
 				fmt.Printf("\n[ERROR] Failed to eval")
 				os.Exit(1)
 			}
+			fmt.Printf("\nSTART ----------------------------------------")
+			for i, id := range embd {
+				token := ml.Token2Str(ctx.Vocab, id)
+				fmt.Printf("\n[INFO] %d token: `%s`", i, token)
+			}
+			fmt.Printf("\nEND ----------------------------------------")
 		}
 
 		pastCount += uint32(len(embd))
-		fmt.Printf("[INFO] Past count %d\n", pastCount)
-		fmt.Printf("[INFO] len(embd) %d\n", uint32(len(embd)))
+		// fmt.Printf("[INFO] Past count %d\n", pastCount)
+		// fmt.Printf("[INFO] len(embd) %d\n", uint32(len(embd)))
 		embd = []uint32{}
 
 		if len(embdInp) <= int(consumedCount) { // && !isInteracting {
@@ -310,10 +316,10 @@ func main() {
 					continue
 				}
 
-				_, err := llama.Colorize("[white]" + token)
-				if err != nil {
-					return
-				}
+				// _, err := llama.Colorize("[white]" + token)
+				// if err != nil {
+				// 	return
+				// }
 
 			}
 			// break

@@ -247,6 +247,7 @@ func Eval(
 	// fmt.Println("starting loop model.tokEmbeddings DATA: ", model.tokEmbeddings.Data[:10])
 	inpL := ml.GetRows(ctx0, model.tokEmbeddings, embd)
 	// fmt.Println("starting loop: ", inpL.Data[:10])
+	fmt.Printf("\n[CACHING] start embd.NE `%v`, impL.NE `%v`, model.tokEmbeddings.NE `%v`\n", embd.NE, inpL.NE, model.tokEmbeddings.NE)
 
 	for il := uint32(0); il < layersCount; il++ {
 
@@ -278,27 +279,32 @@ func Eval(
 
 			// store key and value to memory
 			if N >= 1 {
-				// fmt.Println("START CHACHING -------------------------------")
-				// fmt.Println("[CACHING]", il, " Qcur shape: ", Qcur.NE)
-				// fmt.Println("[CACHING]", il, " Kcur shape: ", Kcur.NE)
-				// fmt.Println("[CACHING]", il, " Vcur shape: ", Vcur.NE)
-				// fmt.Println("[CACHING]", il, " cur shape: ", cur.NE)
-				// fmt.Println("[CACHING]", il, " kvheadcount: ", kvHeadsCount)
 				k := ml.View1D(ctx0, kvSelf.K, N*kvHeadsCount*nEmbdHead, embdSize*(il*ctxSize+pastCount))
 				v := ml.View1D(ctx0, kvSelf.V, N*kvHeadsCount*nEmbdHead, embdSize*(il*ctxSize+pastCount))
-				// fmt.Println("[CACHING]", il, " N: ", N)
-				// fmt.Println("[CACHING]", il, " kvHeadsCount: ", kvHeadsCount)
-				// fmt.Println("[CACHING]", il, " nEmbdHead: ", nEmbdHead)
-				// fmt.Println("[CACHING]", il, " N*kvHeadsCount*nEmbdHead, NE0: ", N*kvHeadsCount*nEmbdHead)
-				// fmt.Println("[CACHING]", il, " N*kvHeadsCount*nEmbdHead, OFFSET: ", embdSize*(il*ctxSize+pastCount))
-				// fmt.Println("[CACHING]", il, " kvSelf.k shape: ", kvSelf.K.NE)
-				// fmt.Println("[CACHING]", il, " kvSelf.v shape: ", kvSelf.V.NE)
-				// fmt.Println("[CACHING]", il, " k shape: ", k.NE)
-				// fmt.Println("[CACHING]", il, " v shape: ", v.NE)
-				// fmt.Println("END CHACHING -------------------------------")
 
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Kcur, k))
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Vcur, v))
+				if il == 0 {
+					fmt.Println("START CHACHING -------------------------------")
+					fmt.Println("[CACHING]", il, " Qcur shape: ", Qcur.NE)
+					fmt.Println("[CACHING]", il, " Kcur shape: ", Kcur.NE)
+					fmt.Println("[CACHING]", il, " Vcur shape: ", Vcur.NE)
+					fmt.Println("[CACHING]", il, " cur shape: ", cur.NE)
+					fmt.Println("[CACHING]", il, " kvheadcount: ", kvHeadsCount)
+					fmt.Println("[CACHING]", il, " N: ", N)
+					fmt.Println("[CACHING]", il, " OFFSET: ", embdSize*(il*ctxSize+pastCount))
+					fmt.Println("[CACHING]", il, " NE0: ", N*kvHeadsCount*nEmbdHead)
+
+					fmt.Println("[CACHING]", il, " kvHeadsCount: ", kvHeadsCount)
+					fmt.Println("[CACHING]", il, " nEmbdHead: ", nEmbdHead)
+					fmt.Println("[CACHING]", il, " N*kvHeadsCount*nEmbdHead, NE0: ", N*kvHeadsCount*nEmbdHead)
+					fmt.Println("[CACHING]", il, " N*kvHeadsCount*nEmbdHead, OFFSET: ", embdSize*(il*ctxSize+pastCount))
+					fmt.Println("[CACHING]", il, " kvSelf.k shape: ", kvSelf.K.NE)
+					fmt.Println("[CACHING]", il, " kvSelf.v shape: ", kvSelf.V.NE)
+					fmt.Println("[CACHING]", il, " k shape: ", k.NE)
+					fmt.Println("[CACHING]", il, " v shape: ", v.NE)
+					fmt.Println("END CHACHING -------------------------------")
+				}
 			}
 
 			// Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
@@ -1112,6 +1118,8 @@ func LoadModel(
 	fmt.Printf("\n[info] size  = %v", size)
 	fmt.Printf("\n[info] kvSelf.K  = %v", lctx.Model.kvSelf.K.NE)
 	fmt.Printf("\n[info] kvSelf.v   = %v", lctx.Model.kvSelf.V.NE)
+	fmt.Println("\n[info] SIZE: ", size)
+	fmt.Println("\n[info] embdSize * layersCount: ", embdSize*layersCount)
 
 	// NB! Do not try to resize / relocate secondary pointers
 	lctx.Vocab = ml.NewVocab(vocabSize)
@@ -1498,7 +1506,7 @@ func LoadModelGGUF(
 	model.hparams.f16 = 1 // TODO: FIX THIS
 
 	dt := ml.TYPE_F32
-	size := uint32(embdSize * layersCount * 512) /*ctxSize*/ // FIXME ctxSize
+	size := uint32(embdSize * kvHeadCount * 512) /*ctxSize*/ // FIXME ctxSize
 	// size := uint32((kvHeadCount * nEmbdHead) * ctxLength)
 	fmt.Println("SIZE: ", size)
 	fmt.Println("embdSize * layersCount: ", size)
@@ -1636,32 +1644,20 @@ func LoadModelGGUF(
 	fmt.Println("g.Tensors", len(g.Tensors))
 	for t := range g.Tensors {
 		ggufTensor := g.Tensors[t]
-		fmt.Printf("\n[INFO] Loading tensor named: %s dims %v", ggufTensor.Name, ggufTensor.Dimensions)
-		// fmt.Println("Loading tensor named: ", ggufTensor.Name)
-		// if !silent && runtime.GOOS != "windows" && loadedTensors%100 == 0 {
-		// 	err = bar.Set(int(loadedTensors))
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
-		// 	break
-		// }
+		// fmt.Printf("\n[INFO] Loading tensor named: %s dims %v", ggufTensor.Name, ggufTensor.Dimensions)
 		// fmt.Println("Loading ggufTensor shape: ", ggufTensor.Dimensions)
 		modelTensor, ok := model.tensors[ggufTensor.Name]
-		// fmt.Println("[info] Starting modelTensor Data: ", modelTensor.Data[:10])
-		// fmt.Println("Loading modelTensor shape: ", modelTensor.NE)
 		if !ok {
 			return nil, fmt.Errorf("could not find tensor for %s", ggufTensor.Name)
 		}
 		err = loadTensor(modelTensor, &ggufTensor)
-		// fmt.Println("Loaded tensor named: ", ggufTensor.Name)
-		// fmt.Println("[info] Loaded ggufTensor shape: ", modelTensor.Data[:10])
 		if err != nil {
 			return nil, err
 		}
 		loadedTensors++
-		// if !silent && runtime.GOOS != "windows" {
-		// 	bar.Add(1)
-		// }
+		if !silent && runtime.GOOS != "windows" {
+			bar.Add(1)
+		}
 	}
 	if !silent && runtime.GOOS != "windows" {
 		bar.Finish()
