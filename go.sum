@@ -1,3 +1,5 @@
+github.com/abrander/gguf v0.0.0-20231228004541-3d15a052a17f h1:0N46UDO1o1dd1miAx6yh5F9ABZIOGs81tsjTFYMcNkw=
+github.com/abrander/gguf v0.0.0-20231228004541-3d15a052a17f/go.mod h1:5BQP8kdzjiZiAtfTARj1BAPhjQkbPXOXD62nB+bLwXc=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/jessevdk/go-flags v1.5.0 h1:1jKYvbxEjfUl0fmqTCOfonvskHHXMjBySTLW4y9LFvc=

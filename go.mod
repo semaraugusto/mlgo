@@ -12,6 +12,7 @@ require (
 )
 
 require (
+	github.com/abrander/gguf v0.0.0-20231228004541-3d15a052a17f // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
