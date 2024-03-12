@@ -245,13 +245,17 @@ func CanMulMat(t0, t1 *Tensor) bool {
 }
 
 // ggml_mul_mat
+// a: k columns, n rows => [ne03, ne02, n, k]
+// b: k columns, m rows => [ne03 * x, ne02 * y, m, k]
+// result is n columns, m rows => [ne03 * x, ne02 * y, m, n]
 func MulMat(ctx *Context, a, b *Tensor) *Tensor {
 	////ASSERT(ggml_can_mul_mat(a, b));
 	////GGML_ASSERT(!ggml_is_transposed(a));
 
 	isNode := false
 	if !CanMulMat(a, b) {
-		fmt.Printf("\n[STOP] MulMat - mismatched tensor shapes! (%v) and (%v)", a.NE, b.NE)
+		fmt.Printf("\n[STOP] MulMat - mismatched tensor shapes! (%v) and (%v)\n", a.NE, b.NE)
+		os.Exit(1)
 	}
 
 	if a.grad != nil || b.grad != nil {
@@ -1890,29 +1894,72 @@ func ComputeForwardRepeatFP32(params *ComputeParams, src0, dst *Tensor) {
 	////assert( dst->ne[2] == 1);
 	////assert( dst->ne[3] == 1);
 
-	nc := dst.NE[0]
-	nr := dst.NE[1]
-	nc0 := src0.NE[0]
-	nr0 := src0.NE[1]
-	ncr := nc / nc0 // guaranteed to be an integer due to the check in ggml_can_repeat
-	nrr := nr / nr0 // guaranteed to be an integer due to the check in ggml_can_repeat
+	// nc := dst.NE[0]
+	// nr := dst.NE[1]
+	// nc0 := src0.NE[0]
+	// nr0 := src0.NE[1]
+	// ncr := nc / nc0 // guaranteed to be an integer due to the check in ggml_can_repeat
+	// nrr := nr / nr0 // guaranteed to be an integer due to the check in ggml_can_repeat
+
+	ne0 := dst.NE[0]
+	ne1 := dst.NE[1]
+	ne2 := dst.NE[2]
+	ne3 := dst.NE[3]
+	ne00 := src0.NE[0]
+	ne01 := src0.NE[1]
+	ne02 := src0.NE[2]
+	ne03 := src0.NE[3]
+	nr0 := ne0 / ne00 // guaranteed to be an integer due to the check in ggml_can_repeat
+	nr1 := ne1 / ne01 // guaranteed to be an integer due to the check in ggml_can_repeat
+	nr2 := ne2 / ne02 // guaranteed to be an integer due to the check in ggml_can_repeat
+	nr3 := ne3 / ne03 // guaranteed to be an integer due to the check in ggml_can_repeat
 
 	// TODO: support for transposed / permuted tensors
 	////assert( dst->nb[0] == sizeof(float));
 	////assert(src0->nb[0] == sizeof(float));
 
 	// TODO: maybe this is not optimal?
-	for i := uint32(0); i < nrr; i++ {
-		for j := uint32(0); j < ncr; j++ {
-			for k := uint32(0); k < nr0; k++ {
+	// for             (int k2 = 0; k2 < ne02; k2++) {
+	//     for         (int i1 = 0; i1 < nr1;  i1++) {
+	// 	for     (int k1 = 0; k1 < ne01; k1++) {
+	// 	    for (int i0 = 0; i0 < nr0;  i0++) {
+	for i3 := uint32(0); i3 < nr3; i3++ {
+		for k3 := uint32(0); k3 < ne03; k3++ {
+			for i2 := uint32(0); i2 < nr2; i2++ {
+				for k2 := uint32(0); k2 < ne02; k2++ {
+					for i1 := uint32(0); i1 < nr1; i1++ {
+						for k1 := uint32(0); k1 < ne01; k1++ {
+							for i0 := uint32(0); i0 < nr0; i0++ {
+								////ggml_vec_cpy_f32(nc0,
+								////(float *) ((char *)  dst->data + (i*nr0 + k)*( dst->nb[1]) + j*nc0*( dst->nb[0])),
+								////(float *) ((char *) src0->data + (        k)*(src0->nb[1])));
 
-				////ggml_vec_cpy_f32(nc0,
-				////(float *) ((char *)  dst->data + (i*nr0 + k)*( dst->nb[1]) + j*nc0*( dst->nb[0])),
-				////(float *) ((char *) src0->data + (        k)*(src0->nb[1])));
+								// dst->data + (i3*ne03 + k3)*nb3  + (i2*ne02 + k2)*nb2  + (i1*ne01 + k1)*nb1)
+								// dst->data + (i3*ne03 + k3)*nb3  +   + (i1*ne01 + k1)*nb1  + (i0*ne00)*nb0)
 
-				VecCopyFP32(nc0,
-					dst.Data[(i*nr0+k)*dst.NB[1]/4+j*nc0*dst.NB[0]/4:],
-					src0.Data[k*src0.NB[1]/4:])
+								// (i2*ne02 + k2)*nb2
+								dstOff3 := (i3*ne03 + k3) * dst.NB[3] / 4
+								// (i2*ne02 + k2)*nb2
+								dstOff2 := (i2*ne02 + k2) * dst.NB[2] / 4
+								// (i1*ne01 + k1)*nb1
+								dstOff1 := (i1*ne01 + k1) * dst.NB[1] / 4
+								// (i0*ne00)*nb0
+								dstOff0 := i0 * ne00 * dst.NB[0] / 4
+
+								// src0->data + (k3)*nb03 + (k2)*nb02 + (k1)*nb01));
+								// srcOff0 := k1 * src0.NB[1] / 4
+								srcOff2 := k3 * src0.NB[3] / 4
+								srcOff1 := k2 * src0.NB[2] / 4
+								srcOff0 := k1 * src0.NB[1] / 4
+								// dst.Data[dstOff2+dstOff3:]
+
+								VecCopyFP32(ne00,
+									dst.Data[dstOff3+dstOff2+dstOff1+dstOff0:],
+									src0.Data[srcOff2+srcOff1+srcOff0:])
+							}
+						}
+					}
+				}
 			}
 		}
 	}

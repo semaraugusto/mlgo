@@ -671,22 +671,22 @@ func Eval(
 					0, 2, 1, 3)
 
 			// K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
-			debug("[info] N: %d", N)
+			// debug("[info] N: %d", N)
 			viewNE0 := (pastCount + N) * cacheSize
 			viewOffset := (il * ctxSize * cacheSize)
-			debug("[info] CACHE SIZE: %d", cacheSize)
-			debug("[info] viewNe0: %d", viewNE0)
-			debug("[info] viewOffset: %d", viewOffset)
+			// debug("[info] CACHE SIZE: %d", cacheSize)
+			// debug("[info] viewNe0: %d", viewNE0)
+			// debug("[info] viewOffset: %d", viewOffset)
 			// ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
 			// view := ml.View1D(ctx0, kvSelf.K, viewNE0, viewOffset)
 			view := ml.View1D(ctx0, kvSelf.K, viewNE0, viewOffset)
 			cacheNE0 := cacheSize / kvHeadsCount
 			cacheNE1 := kvHeadsCount
 			cacheNE2 := pastCount + N
-			debug("[info] view.shape: %v", view.NE)
-			debug("[info] cacheNE0: %d", cacheNE0)
-			debug("[info] cacheNE1: %d", cacheNE1)
-			debug("[info] cacheNE2: %d", cacheNE2)
+			// debug("[info] view.shape: %v", view.NE)
+			// debug("[info] cacheNE0: %d", cacheNE0)
+			// debug("[info] cacheNE1: %d", cacheNE1)
+			// debug("[info] cacheNE2: %d", cacheNE2)
 
 			reshape := ml.Reshape3D(ctx0,
 				////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
@@ -699,27 +699,19 @@ func Eval(
 						reshape,
 						pastCount, rotCount, 1),
 					0, 2, 1, 3)
-			fmt.Println(il, "K COMPUTING END-------------------------------")
-			// cacheNE0 := cacheSize / kvHeadsCount
-			// cacheNE1 := kvHeadsCount
-			// cacheNE2 := pastCount + N
-			//
-			// K :=
-			// 	ml.Permute(ctx0,
-			// 		ml.Rope(ctx0,
-			// 			ml.Reshape3D(ctx0,
-			// 				////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
-			// 				////n_embd/n_head, n_head, n_past + N),
-			// 				view,
-			// 				cacheNE0, cacheNE1, cacheNE2),
-			// 			pastCount, rotCount, 1),
-			// 		0, 2, 1, 3)
 
-			// K * Q
-			////struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
-			KQ := ml.MulMat(ctx0, K, Q)
+			repeated := ml.Repeat(ctx0, K,
+				ml.NewTensor4D(ctx0, ml.TYPE_F32 /* kv_self.v->typp */, K.NE[0], K.NE[1], Q.NE[2], K.NE[3]))
+			// debug("[info] reshape.shape:  (%v)", reshape.NE)
+			// debug("[info] K.shape:        (%v)", K.NE)
+			// debug("[info] REPEATED.shape: (%v)", repeated.NE)
+			// debug("[info] Q.shape:        (%v)", Q.NE)
 
-			// KQ_scaled = KQ / sqrt(n_embd/n_head)
+			KQ := ml.MulMat(ctx0, repeated, Q)
+			// debug("[info] KQ.shape:       (%v)", KQ.NE)
+			// fmt.Println(il, "K COMPUTING END-------------------------------")
+
+			// KQ_scalpd = KQ / sqrt(n_embd/n_head)
 			KQScaled :=
 				ml.Scale(ctx0,
 					KQ,
@@ -733,19 +725,40 @@ func Eval(
 			// KQ = soft_max(KQ_masked)
 			////struct ggml_tensor * KQ_soft_max = ggml_soft_max(ctx0, KQ_masked);
 			KQSoftMax := ml.SoftMax(ctx0, KQMasked)
+			// debug("[info] KQSoftMax.shape (%v)", KQSoftMax.NE)
+			// fmt.Println(il, "KQSoftMax COMPUTING END-------------------------------")
 
 			// V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
+			view = ml.View1D(ctx0, kvSelf.V, viewNE0, viewOffset)
 			VTrans :=
 				ml.Copy(ctx0,
 					ml.Permute(ctx0,
 						ml.Reshape3D(ctx0,
-							ml.View1D(ctx0, kvSelf.V, (pastCount+N)*embdSize, il*ctxSize*embdSize),
-							embdSize/headsCount, headsCount, pastCount+N),
+							view,
+							cacheNE0, cacheNE1, cacheNE2),
 						1, 2, 0, 3),
-					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, pastCount+N, embdSize/headsCount, headsCount))
+					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, cacheNE2, cacheNE0, cacheNE1))
+				// 		K :=
+				// ml.Permute(ctx0,
+				// 	ml.Rope(ctx0,
+				// 		ml.Reshape3D(ctx0,
+				// 			////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
+				// 			////n_embd/n_head, n_head, n_past + N),
+				// 			ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+				// 			embdSize/headsCount, headsCount, pastCount+N),
+				// 		pastCount, rotCount, 1),
+				// 	0, 2, 1, 3)
+
+			VRepeated := ml.Repeat(ctx0, VTrans,
+				ml.NewTensor4D(ctx0, ml.TYPE_F32 /* kv_self.v->typp */, VTrans.NE[0], VTrans.NE[1], KQSoftMax.NE[2], VTrans.NE[3]))
 
 			// KQV = transpose(V) * KQ_soft_max
-			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
+			// debug("[info] VTrans.shape    (%v)", VTrans.NE)
+			// debug("[info] VTrans.shape    (%v)", VTrans.NE)
+			// debug("[info] KQSoftMax.shape (%v)", KQSoftMax.NE)
+			KQV := ml.MulMat(ctx0, VRepeated, KQSoftMax)
+			// debug("[info] KQV.shape       (%v)", KQV.NE)
+			// fmt.Println(il, "KQV COMPUTING END-------------------------------")
 
 			// KQV_merged = KQV.permute(0, 2, 1, 3)
 			KQVMerged := ml.Permute(ctx0, KQV, 0, 2, 1, 3)
