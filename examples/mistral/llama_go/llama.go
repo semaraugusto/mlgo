@@ -168,6 +168,10 @@ func NewModel() *Model {
 	}
 }
 
+func debug(format string, args ...interface{}) {
+	fmt.Printf(colorstring.Color("[green]"+format+"[reset]\n"), args...)
+}
+
 func min(a, b int) int {
 	if a <= b {
 		return a
@@ -226,7 +230,8 @@ func Eval(
 	vocabSize := model.hparams.vocabSize
 	rotCount := model.hparams.embdSize / model.hparams.headsCount
 	nEmbdHead := embdSize / headsCount
-	// fmt.Printf("ctxSize: %d\n", ctxSize)
+	cacheSize := kvHeadsCount * nEmbdHead
+	fmt.Printf("ctxSize: %d\n", ctxSize)
 	// kvHeadCount := embdSize / headsCount
 
 	ctx0 := &ml.Context{} //ctx0 := ml.Init(ml.InitParams{})
@@ -255,6 +260,7 @@ func Eval(
 		//if il > 0 {
 		//	break // DEBUG
 		//}
+		// fmt.Println("START LAYER: ", il)
 
 		inpSA := inpL
 		cur := &ml.Tensor{}
@@ -268,7 +274,7 @@ func Eval(
 		rep := ml.Repeat(ctx0, model.layers[il].attentionNorm, cur)
 
 		cur = ml.Mul(ctx0, rep, cur)
-		// fmt.Println("starting self attention: ", cur.Data[:10])
+		// fmt.Println("starting self attention: ", cur.NE)
 
 		// self-attention
 		{
@@ -279,32 +285,34 @@ func Eval(
 
 			// store key and value to memory
 			if N >= 1 {
-				k := ml.View1D(ctx0, kvSelf.K, N*kvHeadsCount*nEmbdHead, embdSize*(il*ctxSize+pastCount))
-				v := ml.View1D(ctx0, kvSelf.V, N*kvHeadsCount*nEmbdHead, embdSize*(il*ctxSize+pastCount))
+				// fmt.Println("START CHACHING -------------------------------")
+				// fmt.Println("[CACHING]", il, " BEFORE kvSelf.k shape: ", kvSelf.K.NE)
+				// fmt.Println("[CACHING]", il, " BEFORE kvSelf.v shape: ", kvSelf.V.NE)
+				// fmt.Println("[CACHING]", il, " kvHeadsCount: ", kvHeadsCount)
+				// fmt.Println("[CACHING]", il, " nEmbdHead: ", nEmbdHead)
+				// fmt.Println("[CACHING]", il, " ctxSize: ", ctxSize)
+				// fmt.Println("[CACHING]", il, " pastCount: ", pastCount)
+				// fmt.Println("[CACHING]", il, " il*ctxSize + pastCount: ", (il*ctxSize + pastCount))
+				// // cacheSize := kvHeadsCount * nEmbdHead
+				// fmt.Println("[CACHING]", il, " cacheSize: ", cacheSize)
+				ne0 := N * cacheSize
+				offset := cacheSize * (il*nEmbdHead + pastCount)
+				// fmt.Println("[CACHING]", il, " NE0: ", ne0)
+				// fmt.Println("[CACHING]", il, " OFFSET: ", offset)
+
+				k := ml.View1D(ctx0, kvSelf.K, ne0, offset)
+				v := ml.View1D(ctx0, kvSelf.V, ne0, offset)
+				// fmt.Println("[CACHING]", il, " AFTER  kvSelf.k shape: ", k.NE)
+				// fmt.Println("[CACHING]", il, " AFTER  kvSelf.v shape: ", v.NE)
+				// fmt.Println("[CACHING] Kcur shape: ", Kcur.NE)
+				// fmt.Println("[CACHING] k shape   : ", k.NE)
+				// fmt.Println("[CACHING] Vcur shape: ", Vcur.NE)
+				// fmt.Println("[CACHING] v shape   : ", v.NE)
 
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Kcur, k))
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Vcur, v))
-				if il == 0 {
-					fmt.Println("START CHACHING -------------------------------")
-					fmt.Println("[CACHING]", il, " Qcur shape: ", Qcur.NE)
-					fmt.Println("[CACHING]", il, " Kcur shape: ", Kcur.NE)
-					fmt.Println("[CACHING]", il, " Vcur shape: ", Vcur.NE)
-					fmt.Println("[CACHING]", il, " cur shape: ", cur.NE)
-					fmt.Println("[CACHING]", il, " kvheadcount: ", kvHeadsCount)
-					fmt.Println("[CACHING]", il, " N: ", N)
-					fmt.Println("[CACHING]", il, " OFFSET: ", embdSize*(il*ctxSize+pastCount))
-					fmt.Println("[CACHING]", il, " NE0: ", N*kvHeadsCount*nEmbdHead)
-
-					fmt.Println("[CACHING]", il, " kvHeadsCount: ", kvHeadsCount)
-					fmt.Println("[CACHING]", il, " nEmbdHead: ", nEmbdHead)
-					fmt.Println("[CACHING]", il, " N*kvHeadsCount*nEmbdHead, NE0: ", N*kvHeadsCount*nEmbdHead)
-					fmt.Println("[CACHING]", il, " N*kvHeadsCount*nEmbdHead, OFFSET: ", embdSize*(il*ctxSize+pastCount))
-					fmt.Println("[CACHING]", il, " kvSelf.k shape: ", kvSelf.K.NE)
-					fmt.Println("[CACHING]", il, " kvSelf.v shape: ", kvSelf.V.NE)
-					fmt.Println("[CACHING]", il, " k shape: ", k.NE)
-					fmt.Println("[CACHING]", il, " v shape: ", v.NE)
-					fmt.Println("END CHACHING -------------------------------")
-				}
+				// fmt.Println("[CACHING]", il, " N: ", N)
+				// fmt.Println("END CHACHING -------------------------------")
 			}
 
 			// Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
@@ -317,6 +325,9 @@ func Eval(
 						pastCount, rotCount, 0),
 					0, 2, 1, 3)
 
+			// if il == 0 {
+			// fmt.Println(il, "Q COMPUTING END-------------------------------")
+			// }
 			// K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
 			// view := ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize)
 			// reshape0 := embdSize / headsCount
@@ -327,6 +338,12 @@ func Eval(
 			// fmt.Println("K PARAMS headsCount: ", headsCount)
 			// fmt.Println("K PARAMS pastCount + N: ", pastCount+N)
 			// fmt.Println(": ", view.NE, reshape0, reshape1, reshape2)
+			viewNE0 := (pastCount + N) * cacheSize
+			viewOffset := cacheSize * (il*nEmbdHead + pastCount)
+			view := ml.View1D(ctx0, kvSelf.K, viewNE0, viewOffset)
+			cacheNE0 := cacheSize / kvHeadsCount
+			cacheNE1 := kvHeadsCount
+			cacheNE2 := pastCount + N
 
 			K :=
 				ml.Permute(ctx0,
@@ -334,11 +351,12 @@ func Eval(
 						ml.Reshape3D(ctx0,
 							////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
 							////n_embd/n_head, n_head, n_past + N),
-							ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
-							embdSize/headsCount, headsCount, pastCount+N),
+							view,
+							cacheNE0, cacheNE1, cacheNE2),
 						pastCount, rotCount, 1),
 					0, 2, 1, 3)
 
+			// fmt.Println(il, "K COMPUTING END-------------------------------")
 			// K * Q
 			////struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
 			KQ := ml.MulMat(ctx0, K, Q)
@@ -350,6 +368,7 @@ func Eval(
 					ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
 				)
 
+			// fmt.Println(il, "KQScaled COMPUTING END-------------------------------")
 			// KQ_masked = mask_past(KQ_scaled)
 			////struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ_scaled, n_past);
 			KQMasked := ml.DiagMaskInf(ctx0, KQScaled, pastCount)
@@ -357,33 +376,56 @@ func Eval(
 			// KQ = soft_max(KQ_masked)
 			////struct ggml_tensor * KQ_soft_max = ggml_soft_max(ctx0, KQ_masked);
 			KQSoftMax := ml.SoftMax(ctx0, KQMasked)
+			// fmt.Println(il, "KQSoftMax COMPUTING END-------------------------------")
 
 			// V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
+			fmt.Println("K PARAMS headsCount: ", headsCount)
+			debug("kvSelf.V.NE: %v", kvSelf.V.NE)
+			debug("kvSelf.V.NE: %v", kvSelf.V.NE)
+			// ne0 = (pastCount + N) * embdSize
+			// offset := il * ctxSize * embdSize
+
+			view = ml.View1D(ctx0, kvSelf.V, viewNE0, viewOffset)
+			// VTrans :=
+			// 	ml.Copy(ctx0,
+			// 		ml.Permute(ctx0,
+			// 			ml.Reshape3D(ctx0,
+			// 				ml.View1D(ctx0, kvSelf.V, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+			// 				embdSize/headsCount, headsCount, pastCount+N),
+			// 			1, 2, 0, 3),
+			// 		ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, pastCount+N, embdSize/headsCount, headsCount))
+
 			VTrans :=
 				ml.Copy(ctx0,
 					ml.Permute(ctx0,
 						ml.Reshape3D(ctx0,
-							ml.View1D(ctx0, kvSelf.V, (pastCount+N)*embdSize, il*ctxSize*embdSize),
-							embdSize/headsCount, headsCount, pastCount+N),
+							view,
+							cacheNE0, cacheNE1, cacheNE2),
 						1, 2, 0, 3),
-					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, pastCount+N, embdSize/headsCount, headsCount))
+					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, cacheNE2, cacheNE0, cacheNE1))
 
+			debug("VTrans.NE: %v", VTrans.NE)
+			debug("KQSoftMax.NE: %v", KQSoftMax.NE)
 			// KQV = transpose(V) * KQ_soft_max
 			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
+			debug("KQV.NE: %v", KQV.NE)
 
 			// KQV_merged = KQV.permute(0, 2, 1, 3)
 			KQVMerged := ml.Permute(ctx0, KQV, 0, 2, 1, 3)
+			debug("KQVMerged.NE: %v", KQVMerged.NE)
+			// debug("KQVMerged.NE: %v", KQVMerged.NE)
 
 			// cur = KQV_merged.contiguous().view(n_embd, N)
 			cur = ml.Copy(ctx0,
 				KQVMerged,
-				ml.NewTensor2D(ctx0, ml.TYPE_F32, embdSize, N))
+				ml.NewTensor2D(ctx0, ml.TYPE_F32, cacheSize, N))
 
 			// projection (no bias)
 			cur = ml.MulMat(ctx0,
 				model.layers[il].wo,
 				cur)
 		}
+		fmt.Println(il, "ATTENTION BLOCK END-------------------------------")
 		// fmt.Println("Self attention done. Cur shape: ", cur.NE)
 		// fmt.Println("inpSA add. inpSA shape: ", inpSA.NE)
 		inpFF := ml.Add(ctx0, cur, inpSA)
@@ -417,11 +459,13 @@ func Eval(
 				model.layers[il].w2,
 				cur)
 		}
+		fmt.Println(il, "FEED-FORWARD END-------------------------------")
 
 		cur = ml.Add(ctx0, cur, inpFF)
 
 		// input for next layer
 		inpL = cur
+		fmt.Println("INPUT FOR NEXT ipnL.NE", inpL.NE)
 
 	}
 	// fmt.Println("FeedForward done. inpL, cur shape: ", inpL.NE)
@@ -430,6 +474,7 @@ func Eval(
 	////var embeddings *ml.Tensor
 
 	// --- norm
+	fmt.Println("INPUT FOR NEXT ipnL.NE", inpL.NE)
 
 	inpL = ml.RMSNorm(ctx0, inpL)
 	// fmt.Println("RMSNorm done. inpL shape: ", inpL.NE)
@@ -438,9 +483,11 @@ func Eval(
 	inpL = ml.Mul(ctx0,
 		ml.Repeat(ctx0, model.norm, inpL),
 		inpL)
+
 	// fmt.Println("mul done. inpL shape: ", inpL.NE)
 
 	embeddings := inpL
+	fmt.Println("FINAL EMBEDDINGS: ", embeddings.NE)
 	// fmt.Println("embeddings shape: ", embeddings.NE)
 
 	// lm_head
@@ -1496,7 +1543,7 @@ func LoadModelGGUF(
 	// }
 	model := lctx.Model
 	model.hparams.vocabSize = vocabSize
-	model.hparams.kvHeadsCount = 8
+	model.hparams.kvHeadsCount = uint32(kvHeadCount)
 	// model.hparams.embdSize = embdSize
 	// model.hparams.multSize = multSize
 	// model.hparams.headsCount = headsCount
@@ -1509,7 +1556,7 @@ func LoadModelGGUF(
 	size := uint32(embdSize * kvHeadCount * 512) /*ctxSize*/ // FIXME ctxSize
 	// size := uint32((kvHeadCount * nEmbdHead) * ctxLength)
 	fmt.Println("SIZE: ", size)
-	fmt.Println("embdSize * layersCount: ", size)
+	fmt.Println("embdSize * layersCount: ", embdSize*layersCount)
 	// fmt.Println("(kvHeadCount*nEmbdHead): ", (kvHeadCount * nEmbdHead))
 	model.kvSelf.K = ml.NewTensor1D(nil, dt, size)
 	model.kvSelf.V = ml.NewTensor1D(nil, dt, size)
