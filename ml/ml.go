@@ -250,6 +250,9 @@ func MulMat(ctx *Context, a, b *Tensor) *Tensor {
 	////GGML_ASSERT(!ggml_is_transposed(a));
 
 	isNode := false
+	if !CanMulMat(a, b) {
+		fmt.Printf("\n[STOP] MulMat - mismatched tensor shapes! (%v) and (%v)", a.NE, b.NE)
+	}
 
 	if a.grad != nil || b.grad != nil {
 		isNode = true
@@ -459,7 +462,7 @@ func ReluImpl(ctx *Context, a *Tensor, inplace bool) *Tensor {
 
 	result.op = OP_RELU
 	result.Src0 = a
-	result.Src1 = nil 
+	result.Src1 = nil
 
 	if isNode {
 		result.grad = DupTensor(ctx, result)
@@ -1604,8 +1607,6 @@ func GraphCompute(ctx *Context, graph *Graph) {
 
 }
 
-
-
 // =======================================================================
 
 func ComputeForward(graph *Graph, params *ComputeParams, tensor *Tensor) {
@@ -1938,23 +1939,23 @@ func VecReluFP32(n uint32, y, x []float32) {
 
 func ComputeForwardReluFP32(params *ComputeParams, src0, dst *Tensor) {
 	// assert(params->ith == 0);
-    // assert(ggml_are_same_shape(src0, dst));
+	// assert(ggml_are_same_shape(src0, dst));
 	if !AreSameShape(src0, dst) {
 		fmt.Printf("\n[HALT] ComputeForwardReluFP32 : different shapes!")
 		os.Exit(1)
 	}
 
 	if params.Type == TASK_INIT || params.Type == TASK_FINALIZE {
-		return 
+		return
 	}
 
 	n := src0.Nrows()
 	nc := src0.NE[0]
 
 	// assert(dst->nb[0]  == sizeof(float));
-    // assert(src0->nb[0] == sizeof(float));
+	// assert(src0->nb[0] == sizeof(float));
 
-	for i := uint32(0); i < n; i++{
+	for i := uint32(0); i < n; i++ {
 		// ggml_vec_relu_f32(nc,
 		// 	(float *) ((char *) dst->data  + i*( dst->nb[1])),
 		// 	(float *) ((char *) src0->data + i*(src0->nb[1])));
@@ -2978,7 +2979,6 @@ func Init(params InitParams) {
 	////const uint64_t t_end = ggml_time_us(); UNUSED(t_end);
 
 }
-
 
 func PrintTensor(tensor *Tensor, name string) {
 	var dt string

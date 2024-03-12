@@ -211,11 +211,11 @@ func main() {
 			}
 
 			// fmt.Printf("\n[INFO] Evaluating with len %d", uint32(len(embd)))
+			fmt.Printf("\nSTART EVAL ----------------------------------------")
 			if err := llama.Eval(ctx, embd, uint32(len(embd)), pastCount, params.threadsCount); err != nil {
 				fmt.Printf("\n[ERROR] Failed to eval")
 				os.Exit(1)
 			}
-			fmt.Printf("\nSTART ----------------------------------------")
 			for i, id := range embd {
 				token := ml.Token2Str(ctx.Vocab, id)
 				fmt.Printf("\n[INFO] %d token: `%s`", i, token)

@@ -210,7 +210,7 @@ func ResizeInplace(slice *[]float32, size int) {
 //   - n_threads: number of threads to use
 //
 
-func Eval(
+func EvalNew(
 
 	lctx *Context,
 	tokens []uint32,
@@ -248,10 +248,7 @@ func Eval(
 
 	// Initialize the embd tensor with the tokensFloat32 data
 	embd := ml.NewTensor(ctx0, ml.TYPE_F32, 1, uint32(len(tokens)), 1, 1, 1, tokensFloat32)
-	// fmt.Println("starting loop model.tokEmbeddings SHAPE ", model.tokEmbeddings.NE)
-	// fmt.Println("starting loop model.tokEmbeddings DATA: ", model.tokEmbeddings.Data[:10])
 	inpL := ml.GetRows(ctx0, model.tokEmbeddings, embd)
-	// fmt.Println("starting loop: ", inpL.Data[:10])
 	fmt.Printf("\n[CACHING] start embd.NE `%v`, impL.NE `%v`, model.tokEmbeddings.NE `%v`\n", embd.NE, inpL.NE, model.tokEmbeddings.NE)
 
 	for il := uint32(0); il < layersCount; il++ {
@@ -285,7 +282,7 @@ func Eval(
 
 			// store key and value to memory
 			if N >= 1 {
-				// fmt.Println("START CHACHING -------------------------------")
+				fmt.Println("START CHACHING -------------------------------")
 				// fmt.Println("[CACHING]", il, " BEFORE kvSelf.k shape: ", kvSelf.K.NE)
 				// fmt.Println("[CACHING]", il, " BEFORE kvSelf.v shape: ", kvSelf.V.NE)
 				// fmt.Println("[CACHING]", il, " kvHeadsCount: ", kvHeadsCount)
@@ -312,7 +309,7 @@ func Eval(
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Kcur, k))
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Vcur, v))
 				// fmt.Println("[CACHING]", il, " N: ", N)
-				// fmt.Println("END CHACHING -------------------------------")
+				fmt.Println("END CHACHING -------------------------------")
 			}
 
 			// Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
@@ -333,17 +330,16 @@ func Eval(
 			// reshape0 := embdSize / headsCount
 			// reshape1 := headsCount
 			// reshape2 := pastCount + N
-			// fmt.Println("K PARAMS VIEW.NE: ", view.NE)
-			// fmt.Println("K PARAMS embdSize / headsCount: ", embdSize/headsCount)
-			// fmt.Println("K PARAMS headsCount: ", headsCount)
-			// fmt.Println("K PARAMS pastCount + N: ", pastCount+N)
-			// fmt.Println(": ", view.NE, reshape0, reshape1, reshape2)
 			viewNE0 := (pastCount + N) * cacheSize
 			viewOffset := cacheSize * (il*nEmbdHead + pastCount)
 			view := ml.View1D(ctx0, kvSelf.K, viewNE0, viewOffset)
 			cacheNE0 := cacheSize / kvHeadsCount
 			cacheNE1 := kvHeadsCount
 			cacheNE2 := pastCount + N
+			fmt.Println("K PARAMS VIEW.NE: ", view.NE)
+			fmt.Println("K PARAMS embdSize / headsCount: ", embdSize/headsCount)
+			fmt.Println("K PARAMS headsCount: ", headsCount)
+			fmt.Println("K PARAMS pastCount + N: ", pastCount+N)
 
 			K :=
 				ml.Permute(ctx0,
@@ -356,7 +352,9 @@ func Eval(
 						pastCount, rotCount, 1),
 					0, 2, 1, 3)
 
-			// fmt.Println(il, "K COMPUTING END-------------------------------")
+			fmt.Println(il, "K COMPUTING END-------------------------------")
+			fmt.Println("K.NE: ", K.NE)
+			fmt.Println("Q.NE: ", Q.NE)
 			// K * Q
 			////struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
 			KQ := ml.MulMat(ctx0, K, Q)
@@ -379,9 +377,9 @@ func Eval(
 			// fmt.Println(il, "KQSoftMax COMPUTING END-------------------------------")
 
 			// V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
-			fmt.Println("K PARAMS headsCount: ", headsCount)
-			debug("kvSelf.V.NE: %v", kvSelf.V.NE)
-			debug("kvSelf.V.NE: %v", kvSelf.V.NE)
+			// fmt.Println("K PARAMS headsCount: ", headsCount)
+			// debug("kvSelf.V.NE: %v", kvSelf.V.NE)
+			// debug("kvSelf.V.NE: %v", kvSelf.V.NE)
 			// ne0 = (pastCount + N) * embdSize
 			// offset := il * ctxSize * embdSize
 
@@ -404,15 +402,15 @@ func Eval(
 						1, 2, 0, 3),
 					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, cacheNE2, cacheNE0, cacheNE1))
 
-			debug("VTrans.NE: %v", VTrans.NE)
-			debug("KQSoftMax.NE: %v", KQSoftMax.NE)
+			// debug("VTrans.NE: %v", VTrans.NE)
+			// debug("KQSoftMax.NE: %v", KQSoftMax.NE)
 			// KQV = transpose(V) * KQ_soft_max
 			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
-			debug("KQV.NE: %v", KQV.NE)
+			// debug("KQV.NE: %v", KQV.NE)
 
 			// KQV_merged = KQV.permute(0, 2, 1, 3)
 			KQVMerged := ml.Permute(ctx0, KQV, 0, 2, 1, 3)
-			debug("KQVMerged.NE: %v", KQVMerged.NE)
+			// debug("KQVMerged.NE: %v", KQVMerged.NE)
 			// debug("KQVMerged.NE: %v", KQVMerged.NE)
 
 			// cur = KQV_merged.contiguous().view(n_embd, N)
@@ -425,7 +423,7 @@ func Eval(
 				model.layers[il].wo,
 				cur)
 		}
-		fmt.Println(il, "ATTENTION BLOCK END-------------------------------")
+		// fmt.Println(il, "ATTENTION BLOCK END-------------------------------")
 		// fmt.Println("Self attention done. Cur shape: ", cur.NE)
 		// fmt.Println("inpSA add. inpSA shape: ", inpSA.NE)
 		inpFF := ml.Add(ctx0, cur, inpSA)
@@ -459,13 +457,13 @@ func Eval(
 				model.layers[il].w2,
 				cur)
 		}
-		fmt.Println(il, "FEED-FORWARD END-------------------------------")
+		// fmt.Println(il, "FEED-FORWARD END-------------------------------")
 
 		cur = ml.Add(ctx0, cur, inpFF)
 
 		// input for next layer
 		inpL = cur
-		fmt.Println("INPUT FOR NEXT ipnL.NE", inpL.NE)
+		// fmt.Println("INPUT FOR NEXT ipnL.NE", inpL.NE)
 
 	}
 	// fmt.Println("FeedForward done. inpL, cur shape: ", inpL.NE)
@@ -474,7 +472,7 @@ func Eval(
 	////var embeddings *ml.Tensor
 
 	// --- norm
-	fmt.Println("INPUT FOR NEXT ipnL.NE", inpL.NE)
+	// fmt.Println("INPUT FOR NEXT ipnL.NE", inpL.NE)
 
 	inpL = ml.RMSNorm(ctx0, inpL)
 	// fmt.Println("RMSNorm done. inpL shape: ", inpL.NE)
@@ -531,6 +529,334 @@ func Eval(
 
 	// fmt.Println("logits len: ", len(lctx.Logits))
 	// fmt.Println("\nlogits sum: ", sum)
+
+	if ml.DEBUG {
+		printTensor(inpL, "INPL")
+
+		fmt.Printf("\n\n=== LOGITS === %d ===\n", len(lctx.Logits)) // DEBUG
+		for ii := 0; ii < 13; ii++ {
+			fmt.Printf("%.4f  ", lctx.Logits[ii])
+		}
+	}
+
+	// --- extract embeddings
+
+	if len(lctx.Embedding) > 0 {
+		////memcpy(embedding_out.data(), (float *) ggml_get_data(embeddings) + (n_embd*(N - 1)), sizeof(float)*n_embd);
+		for i := uint32(0); i < embdSize; i++ {
+			lctx.Embedding[i] = embeddings.Data[(embdSize*(N-1))+i] // FIXME ASAP
+		}
+	}
+
+	return nil
+
+}
+
+// evaluate the transformer
+//
+//   - lctx:      llama context
+//   - tokens:    new batch of tokens to process
+//   - n_past:    the context size so far
+//   - n_threads: number of threads to use
+//
+
+func Eval(
+
+	lctx *Context,
+	tokens []uint32,
+	tokensCount uint32,
+	pastCount uint32,
+	threadsCount int) error {
+
+	N := tokensCount
+	model := lctx.Model
+	kvSelf := model.kvSelf
+
+	embdSize := model.hparams.embdSize
+	layersCount := model.hparams.layersCount
+	ctxSize := model.hparams.ctxSize
+	headsCount := model.hparams.headsCount
+	vocabSize := model.hparams.vocabSize
+	kvHeadsCount := model.hparams.kvHeadsCount
+	rotCount := model.hparams.embdSize / model.hparams.headsCount
+	nEmbdHead := embdSize / headsCount
+	numKVGroups := headsCount / kvHeadsCount
+	cacheSize := kvHeadsCount * nEmbdHead
+	debug("ctxSize: %d", ctxSize)
+	debug("numKVGroups: %d", numKVGroups)
+
+	ctx0 := &ml.Context{} //ctx0 := ml.Init(ml.InitParams{})
+
+	// for big prompts, if BLAS is enabled, it is better to use only one thread
+	// otherwise, the threads are spin-lock waiting for the BLAS calls and are degrading the performance
+	graph := ml.Graph{ThreadsCount: threadsCount}
+
+	// Convert the tokens to a []float32 slice
+	tokensFloat32 := make([]float32, len(tokens))
+	for i, token := range tokens {
+		tokensFloat32[i] = float32(token)
+	}
+
+	// Initialize the embd tensor with the tokensFloat32 data
+	embd := ml.NewTensor(ctx0, ml.TYPE_F32, 1, uint32(len(tokens)), 1, 1, 1, tokensFloat32)
+	inpL := ml.GetRows(ctx0, model.tokEmbeddings, embd)
+
+	for il := uint32(0); il < layersCount; il++ {
+
+		//if il > 0 {
+		//	break // DEBUG
+		//}
+
+		inpSA := inpL
+		cur := &ml.Tensor{}
+
+		// norm
+		cur = ml.RMSNorm(ctx0, inpL)
+
+		// cur = attention_norm*cur
+		rep := ml.Repeat(ctx0, model.layers[il].attentionNorm, cur)
+
+		cur = ml.Mul(ctx0, rep, cur)
+
+		// self-attention
+		{
+			Qcur := ml.MulMat(ctx0, model.layers[il].wq, cur)
+			Kcur := ml.MulMat(ctx0, model.layers[il].wk, cur)
+			Vcur := ml.MulMat(ctx0, model.layers[il].wv, cur)
+
+			// store key and value to memory
+			if N >= 1 {
+
+				////struct ggml_tensor * k = ggml_view_1d(ctx0, kv_self.k, N*n_embd, (ggml_element_size(kv_self.k)*n_embd)*(il*n_ctx + n_past));
+				////struct ggml_tensor * v = ggml_view_1d(ctx0, kv_self.v, N*n_embd, (ggml_element_size(kv_self.v)*n_embd)*(il*n_ctx + n_past));
+
+				////ggml_build_forward_expand(&graph, ggml_cpy(ctx0, Kcur, k));
+				////ggml_build_forward_expand(&graph, ggml_cpy(ctx0, Vcur, v));
+
+				// NB! ggml_element_size(kv_self.k) = 2 for FP16
+				origNe0 := N * cacheSize
+				origOffset := cacheSize * (il*ctxSize + pastCount)
+				// offset := cacheSize * (il*nEmbdHead + pastCount)
+				// debug("[CACHING] %i cacheSize: %d, N: %d", il, cacheSize, N)
+				// debug("[CACHING] %d Original ne0: %d", il, origNe0)
+				// debug("[CACHING] %d Original Offset: %d", il, origOffset)
+				ne0 := N * cacheSize
+				if ne0 != origNe0 {
+					fmt.Println("Error: ne0 != origNe0")
+					os.Exit(1)
+				}
+				// offset := cacheSize * (il*nEmbdHead + pastCount)
+				// debug("[CACHING] %d ne0: %d", il, ne0)
+				// debug("[CACHING] %d offset: %d", il, offset)
+
+				k := ml.View1D(ctx0, kvSelf.K, origNe0, origOffset)
+				v := ml.View1D(ctx0, kvSelf.V, origNe0, origOffset)
+				// k := ml.View1D(ctx0, kvSelf.K, ne0, offset)
+				// v := ml.View1D(ctx0, kvSelf.V, ne0, offset)
+				// k := ml.View1D(ctx0, kvSelf.K, N*embdSize, embdSize*(il*ctxSize+pastCount))
+				// v := ml.View1D(ctx0, kvSelf.V, N*embdSize, embdSize*(il*ctxSize+pastCount))
+
+				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Kcur, k))
+				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Vcur, v))
+			}
+
+			// Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
+			Q :=
+				ml.Permute(ctx0,
+					ml.Rope(ctx0,
+						ml.Copy(ctx0,
+							Qcur,
+							ml.NewTensor3D(ctx0, ml.TYPE_F32, embdSize/headsCount, headsCount, N)),
+						pastCount, rotCount, 0),
+					0, 2, 1, 3)
+
+			// K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
+			debug("[info] N: %d", N)
+			viewNE0 := (pastCount + N) * cacheSize
+			viewOffset := (il * ctxSize * cacheSize)
+			debug("[info] CACHE SIZE: %d", cacheSize)
+			debug("[info] viewNe0: %d", viewNE0)
+			debug("[info] viewOffset: %d", viewOffset)
+			// ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+			// view := ml.View1D(ctx0, kvSelf.K, viewNE0, viewOffset)
+			view := ml.View1D(ctx0, kvSelf.K, viewNE0, viewOffset)
+			cacheNE0 := cacheSize / kvHeadsCount
+			cacheNE1 := kvHeadsCount
+			cacheNE2 := pastCount + N
+			debug("[info] view.shape: %v", view.NE)
+			debug("[info] cacheNE0: %d", cacheNE0)
+			debug("[info] cacheNE1: %d", cacheNE1)
+			debug("[info] cacheNE2: %d", cacheNE2)
+
+			reshape := ml.Reshape3D(ctx0,
+				////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
+				////n_embd/n_head, n_head, n_past + N),
+				view,
+				cacheNE0, cacheNE1, cacheNE2)
+			K :=
+				ml.Permute(ctx0,
+					ml.Rope(ctx0,
+						reshape,
+						pastCount, rotCount, 1),
+					0, 2, 1, 3)
+			fmt.Println(il, "K COMPUTING END-------------------------------")
+			// cacheNE0 := cacheSize / kvHeadsCount
+			// cacheNE1 := kvHeadsCount
+			// cacheNE2 := pastCount + N
+			//
+			// K :=
+			// 	ml.Permute(ctx0,
+			// 		ml.Rope(ctx0,
+			// 			ml.Reshape3D(ctx0,
+			// 				////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
+			// 				////n_embd/n_head, n_head, n_past + N),
+			// 				view,
+			// 				cacheNE0, cacheNE1, cacheNE2),
+			// 			pastCount, rotCount, 1),
+			// 		0, 2, 1, 3)
+
+			// K * Q
+			////struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
+			KQ := ml.MulMat(ctx0, K, Q)
+
+			// KQ_scaled = KQ / sqrt(n_embd/n_head)
+			KQScaled :=
+				ml.Scale(ctx0,
+					KQ,
+					ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
+				)
+
+			// KQ_masked = mask_past(KQ_scaled)
+			////struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ_scaled, n_past);
+			KQMasked := ml.DiagMaskInf(ctx0, KQScaled, pastCount)
+
+			// KQ = soft_max(KQ_masked)
+			////struct ggml_tensor * KQ_soft_max = ggml_soft_max(ctx0, KQ_masked);
+			KQSoftMax := ml.SoftMax(ctx0, KQMasked)
+
+			// V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
+			VTrans :=
+				ml.Copy(ctx0,
+					ml.Permute(ctx0,
+						ml.Reshape3D(ctx0,
+							ml.View1D(ctx0, kvSelf.V, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+							embdSize/headsCount, headsCount, pastCount+N),
+						1, 2, 0, 3),
+					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, pastCount+N, embdSize/headsCount, headsCount))
+
+			// KQV = transpose(V) * KQ_soft_max
+			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
+
+			// KQV_merged = KQV.permute(0, 2, 1, 3)
+			KQVMerged := ml.Permute(ctx0, KQV, 0, 2, 1, 3)
+
+			// cur = KQV_merged.contiguous().view(n_embd, N)
+			cur = ml.Copy(ctx0,
+				KQVMerged,
+				ml.NewTensor2D(ctx0, ml.TYPE_F32, embdSize, N))
+
+			// projection (no bias)
+			cur = ml.MulMat(ctx0,
+				model.layers[il].wo,
+				cur)
+		}
+
+		inpFF := ml.Add(ctx0, cur, inpSA)
+
+		// feed-forward network
+		{
+			// norm
+			{
+				cur = ml.RMSNorm(ctx0, inpFF)
+
+				// cur = ffn_norm*cur
+				cur = ml.Mul(ctx0,
+					ml.Repeat(ctx0, model.layers[il].ffn_norm, cur),
+					cur)
+			}
+
+			tmp := ml.MulMat(ctx0,
+				model.layers[il].w3,
+				cur)
+
+			cur = ml.MulMat(ctx0,
+				model.layers[il].w1,
+				cur)
+
+			// SILU activation
+			cur = ml.Silu(ctx0, cur)
+
+			cur = ml.Mul(ctx0, cur, tmp)
+
+			cur = ml.MulMat(ctx0,
+				model.layers[il].w2,
+				cur)
+		}
+
+		cur = ml.Add(ctx0, cur, inpFF)
+
+		// input for next layer
+		inpL = cur
+
+	}
+
+	// used at the end to optionally extract the embeddings
+	////var embeddings *ml.Tensor
+
+	// --- norm
+
+	inpL = ml.RMSNorm(ctx0, inpL)
+
+	// inpL = norm*inpL
+	inpL = ml.Mul(ctx0,
+		ml.Repeat(ctx0, model.norm, inpL),
+		inpL)
+
+	embeddings := inpL
+
+	// lm_head
+	inpL = ml.MulMat(ctx0, model.output, inpL)
+
+	// logits -> probs
+	// COMMENTED inpL = ggml_soft_max(ctx0, inpL);
+
+	// run the computation
+	ml.BuildForwardExpand(&graph, inpL)
+
+	ml.GraphCompute(ctx0, &graph)
+
+	// --- extract logits
+
+	//fmt.Printf("\n\n=== INPL 09 === [%d,%d,%d,%d] ===\n", inpL.NE[0], inpL.NE[1], inpL.NE[2], inpL.NE[3]) // DEBUG
+	//for ii := 0; ii < 12; ii++ {
+	//	fmt.Printf("%.4f  ", inpL.Data[ii])
+	//}
+
+	if lctx.LogitsAll {
+		fmt.Print("\n[HALT] Not Expected: lctx.LogitsAll == true")
+		os.Exit(1)
+
+		/*
+			// Copy inpL.Data to lctx.Logits
+			for i := uint32(0); i < vocabSize*N; i++ {
+				if i >= uint32(len(lctx.Logits)) || i >= uint32(len(inpL.Data)) {
+					fmt.Println("Error: Index out of bounds during Logits copy")
+					os.Exit(1)
+				}
+				lctx.Logits[i] = inpL.Data[i]
+			}
+		*/
+	} else {
+		// Copy only the relevant part of inpL.Data to lctx.Logits
+		for i := uint32(0); i < vocabSize; i++ {
+			srcIndex := vocabSize*(N-1) + i
+			if i >= uint32(len(lctx.Logits)) || srcIndex >= uint32(len(inpL.Data)) {
+				fmt.Println("Error: Index out of bounds during Logits copy")
+				os.Exit(1)
+			}
+			lctx.Logits[i] = inpL.Data[srcIndex]
+		}
+	}
 
 	if ml.DEBUG {
 		printTensor(inpL, "INPL")
