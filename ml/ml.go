@@ -241,13 +241,27 @@ func MulImpl(ctx *Context, a, b *Tensor, inplace bool) *Tensor {
 // ggml_can_mul_mat
 func CanMulMat(t0, t1 *Tensor) bool {
 	////static_assert(MAX_DIMS == 4, "MAX_DIMS is not 4 - update this function");
-	return (t0.NE[0] == t1.NE[0]) && (t0.NE[2] == t1.NE[2]) && (t0.NE[3] == t1.NE[3])
+	// return (t0.NE[0] == t1.NE[0]) && (t0.NE[2] == t1.NE[2]) && (t0.NE[3] == t1.NE[3])
+	// return (t0.NE[0] == t1.NE[0]) && (t0.NE[2] == t1.NE[2]) && (t0.NE[3] == t1.NE[3])
+	if MAX_DIMS != 4 {
+		fmt.Printf("\n[STOP] GGML_MAX_DIMS is not 4 - update this function\n")
+		os.Exit(1)
+	}
+
+	return (t0.NE[0] == t1.NE[0]) &&
+		(t1.NE[2]%t0.NE[2] == 0) && // verify t0 is broadcastable
+		(t1.NE[3]%t0.NE[3] == 0)
 }
 
 // ggml_mul_mat
 // a: k columns, n rows => [ne03, ne02, n, k]
 // b: k columns, m rows => [ne03 * x, ne02 * y, m, k]
 // result is n columns, m rows => [ne03 * x, ne02 * y, m, n]
+
+// a:      [ne03, ne02, n, k]
+// b:      [ne03 * x, ne02 * y, m, k]
+// result: [ne03 * x, ne02 * y, m, n]
+
 func MulMat(ctx *Context, a, b *Tensor) *Tensor {
 	////ASSERT(ggml_can_mul_mat(a, b));
 	////GGML_ASSERT(!ggml_is_transposed(a));
@@ -262,7 +276,7 @@ func MulMat(ctx *Context, a, b *Tensor) *Tensor {
 		isNode = true
 	}
 
-	result := NewTensor(ctx, TYPE_F32, min32(a.Dims, b.Dims), a.NE[1], b.NE[1], a.NE[2], b.NE[3], nil)
+	result := NewTensor(ctx, TYPE_F32, min32(a.Dims, b.Dims), a.NE[1], b.NE[1], b.NE[2], b.NE[3], nil)
 
 	result.op = OP_MUL_MAT
 	result.Src0 = a
@@ -2263,11 +2277,6 @@ func ComputeForwardCopy(params *ComputeParams, src0, dst *Tensor) {
 
 // ggml_compute_forward_dup_f32
 func ComputeForwardDupFP32(params *ComputeParams, src0, dst *Tensor) {
-
-	////GGML_ASSERT(params->ith == 0);
-	////GGML_ASSERT(ggml_is_contiguous(dst));
-	////GGML_ASSERT(ggml_nelements(dst) == ggml_nelements(src0));
-
 	if !dst.IsContiguous() {
 		fmt.Printf("[HALT] ComputeForwardDupFP32 : [dst] is NOT contiguous!")
 		os.Exit(1)
@@ -2301,7 +2310,6 @@ func ComputeForwardDupFP32(params *ComputeParams, src0, dst *Tensor) {
 
 	// --- src0 is NOT contigious
 	// --- supporting only 4-bytes data for [src0] and FP32 for [dst]
-
 	if src0.NB[0] == TYPE_SIZE[TYPE_F32] {
 		if dst.Type == TYPE_F32 {
 
@@ -2323,22 +2331,6 @@ func ComputeForwardDupFP32(params *ComputeParams, src0, dst *Tensor) {
 					}
 				}
 			}
-			////} else if (dst->type == GGML_TYPE_F16) {
-			////    int id = 0;
-			////    ggml_fp16_t * dst_ptr = (ggml_fp16_t *) dst->data;
-
-			////    for (int i03 = 0; i03 < ne03; i03++) {
-			////        for (int i02 = 0; i02 < ne02; i02++) {
-			////            for (int i01 = 0; i01 < ne01; i01++) {
-			////                for (int i00 = 0; i00 < ne00; i00++) {
-			////                    const float * src0_ptr = (float *) ((char *) src0->data + i00*nb00 + i01*nb01 + i02*nb02 + i03*nb03);
-
-			////                    dst_ptr[id] = GGML_FP32_TO_FP16(*src0_ptr);
-			////                    id++;
-			////                }
-			////            }
-			////        }
-			////    }
 		} else {
 			////GGML_ASSERT(false); // TODO: implement
 			fmt.Printf("[HALT] ComputeForwardDupFP32 : not supported tensor type!")
