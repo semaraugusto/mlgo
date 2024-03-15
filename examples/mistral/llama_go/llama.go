@@ -700,14 +700,13 @@ func Eval(
 						pastCount, rotCount, 1),
 					0, 2, 1, 3)
 
-			// // debug("[info] reshape.shape:  (%v)", reshape.NE)
-			// debug("[info] K.shape:        (%v)", K.NE)
-			// debug("[info] REPEATED.shape: (%v)", repeated.NE)
-			// debug("[info] Q.shape:        (%v)", Q.NE)
+			// debug("[info] reshape.shape:  (%v)", reshape.NE)
+			debug("[info] K.shape:        (%v)", K.NE)
+			debug("[info] Q.shape:        (%v)", Q.NE)
 
 			KQ := ml.MulMat(ctx0, K, Q)
-			// debug("[info] KQ.shape:       (%v)", KQ.NE)
-			// fmt.Println(il, "K COMPUTING END-------------------------------")
+			debug("[info] KQ.shape:       (%v)", KQ.NE)
+			fmt.Println(il, "KQ COMPUTING END-------------------------------")
 
 			// KQ_scalpd = KQ / sqrt(n_embd/n_head)
 			KQScaled :=
@@ -715,6 +714,9 @@ func Eval(
 					KQ,
 					ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
 				)
+
+			debug("[info] KQScaled.shape:       (%v)", KQScaled.NE)
+			fmt.Println(il, "KQ COMPUTING END-------------------------------")
 
 			// KQ_masked = mask_past(KQ_scaled)
 			////struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ_scaled, n_past);
@@ -736,16 +738,18 @@ func Eval(
 							cacheNE0, cacheNE1, cacheNE2),
 						1, 2, 0, 3),
 					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, cacheNE2, cacheNE0, cacheNE1))
-				// 		K :=
-				// ml.Permute(ctx0,
-				// 	ml.Rope(ctx0,
-				// 		ml.Reshape3D(ctx0,
-				// 			////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
-				// 			////n_embd/n_head, n_head, n_past + N),
-				// 			ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
-				// 			embdSize/headsCount, headsCount, pastCount+N),
-				// 		pastCount, rotCount, 1),
-				// 	0, 2, 1, 3)
+			debug("[info] VTrans.shape:       (%v)", VTrans.NE)
+			fmt.Println(il, "VTrans COMPUTING END-------------------------------")
+			// 		K :=
+			// ml.Permute(ctx0,
+			// 	ml.Rope(ctx0,
+			// 		ml.Reshape3D(ctx0,
+			// 			////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
+			// 			////n_embd/n_head, n_head, n_past + N),
+			// 			ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+			// 			embdSize/headsCount, headsCount, pastCount+N),
+			// 		pastCount, rotCount, 1),
+			// 	0, 2, 1, 3)
 			// KQV = transpose(V) * KQ_soft_max
 			// debug("[info] VTrans.shape    (%v)", VTrans.NE)
 			// debug("[info] VTrans.shape    (%v)", VTrans.NE)
@@ -757,6 +761,8 @@ func Eval(
 
 			// KQV_merged = KQV.permute(0, 2, 1, 3)
 			KQVMerged := ml.Permute(ctx0, KQV, 0, 2, 1, 3)
+			debug("[info] KQVMerged.shape:       (%v)", KQVMerged.NE)
+			fmt.Println(il, "KQVMerged COMPUTING END-------------------------------")
 
 			// cur = KQV_merged.contiguous().view(n_embd, N)
 			cur = ml.Copy(ctx0,
@@ -767,9 +773,14 @@ func Eval(
 			cur = ml.MulMat(ctx0,
 				model.layers[il].wo,
 				cur)
+
+			debug("[info] END ATT.shape:       (%v)", cur.NE)
+			fmt.Println(il, "END ATT COMPUTING END-------------------------------")
 		}
 
 		inpFF := ml.Add(ctx0, cur, inpSA)
+		debug("[info] inpFF.shape:       (%v)", inpFF.NE)
+		fmt.Println(il, "inpFF COMPUTING END-------------------------------")
 
 		// feed-forward network
 		{
@@ -802,6 +813,8 @@ func Eval(
 		}
 
 		cur = ml.Add(ctx0, cur, inpFF)
+		debug("[info] END FF.shape:       (%v)", cur.NE)
+		fmt.Println(il, "END FF COMPUTING END-------------------------------")
 
 		// input for next layer
 		inpL = cur
@@ -824,6 +837,9 @@ func Eval(
 
 	// lm_head
 	inpL = ml.MulMat(ctx0, model.output, inpL)
+
+	debug("[info] NN OUTPUT inpL.shape:       (%v)", inpL.NE)
+	fmt.Println("NN COMPUTING END-------------------------------")
 
 	// logits -> probs
 	// COMMENTED inpL = ggml_soft_max(ctx0, inpL);
@@ -1437,6 +1453,7 @@ func LoadModel(
 	fileName string,
 	//partsCount int,
 	silent bool,
+	vocabOnly bool,
 ) (*Context, error) {
 
 	lctx := NewContext()
@@ -1495,12 +1512,12 @@ func LoadModel(
 	size := embdSize * layersCount * 512 /*ctxSize*/ // FIXME ctxSize
 	lctx.Model.kvSelf.K = ml.NewTensor1D(nil, dt, size)
 	lctx.Model.kvSelf.V = ml.NewTensor1D(nil, dt, size)
-	fmt.Printf("\n[info] DT  = %v", dt)
-	fmt.Printf("\n[info] size  = %v", size)
-	fmt.Printf("\n[info] kvSelf.K  = %v", lctx.Model.kvSelf.K.NE)
-	fmt.Printf("\n[info] kvSelf.v   = %v", lctx.Model.kvSelf.V.NE)
-	fmt.Println("\n[info] SIZE: ", size)
-	fmt.Println("\n[info] embdSize * layersCount: ", embdSize*layersCount)
+	// fmt.Printf("\n[info] DT  = %v", dt)
+	// fmt.Printf("\n[info] size  = %v", size)
+	// fmt.Printf("\n[info] kvSelf.K  = %v", lctx.Model.kvSelf.K.NE)
+	// fmt.Printf("\n[info] kvSelf.v   = %v", lctx.Model.kvSelf.V.NE)
+	// fmt.Println("\n[info] SIZE: ", size)
+	// fmt.Println("\n[info] embdSize * layersCount: ", embdSize*layersCount)
 
 	// NB! Do not try to resize / relocate secondary pointers
 	lctx.Vocab = ml.NewVocab(vocabSize)
@@ -1564,6 +1581,9 @@ func LoadModel(
 	if !silent && runtime.GOOS != "windows" {
 		vocabBar.Finish()
 		fmt.Printf("\n")
+	}
+	if vocabOnly {
+		return lctx, nil
 	}
 
 	ctx := model.ctx
@@ -1816,6 +1836,7 @@ func LoadModelGGUF(
 	fileName string,
 	// partsCount int,
 	silent bool,
+	vocabOnly bool,
 ) (*Context, error) {
 	lctx := NewContext()
 	g, _ := gguf.OpenFile(fileName)
@@ -1833,23 +1854,43 @@ func LoadModelGGUF(
 	fmt.Printf("Context length: %d\n", ctxLength)
 	embdSize, _ := g.Metadata.Int("llama.embedding_length")
 	layersCount, _ := g.Metadata.Int("llama.block_count")
-	intermediateSize, _ := g.Metadata.Int("llama.attention.head_count_kv")
+	// intermediateSize, _ := g.Metadata.Int("llama.attention.head_count_kv")
 	headCount, _ := g.Metadata.Int("llama.attention.head_count")
 	nEmbdHead := embdSize / headCount
 	kvHeadCount, _ := g.Metadata.Int("llama.attention.head_count_kv")
 	// kvHeadCount := embdSize / headCount
 
-	fmt.Printf("embdSize: %d\n", embdSize)
-	fmt.Printf("layersCount: %d\n", layersCount)
-	fmt.Printf("intermediateSize: %d\n", intermediateSize)
-	fmt.Printf("nEmbdHead: %d\n", nEmbdHead)
-	fmt.Printf("kvHeadCount: %d\n", nEmbdHead)
-	fmt.Printf("size 1: %d\n", nEmbdHead*headCount)
-	fmt.Printf("size 2: %d\n", nEmbdHead*kvHeadCount)
+	// fmt.Printf("embdSize: %d\n", embdSize)
+	// fmt.Printf("layersCount: %d\n", layersCount)
+	// fmt.Printf("intermediateSize: %d\n", intermediateSize)
+	// fmt.Printf("nEmbdHead: %d\n", nEmbdHead)
+	// fmt.Printf("kvHeadCount: %d\n", nEmbdHead)
+	// fmt.Printf("size 1: %d\n", nEmbdHead*headCount)
+	// fmt.Printf("size 2: %d\n", nEmbdHead*kvHeadCount)
 	// vocabSize := len(g.Metadata["tokenizer.ggml.tokens"])
 	// vocabSize, err := len(g.Metadata.Any("tokenizer.ggml.tokens"))
 	// tokens, err := g.Metadata.MetaValue[string]("tokenizer.ggml.tokens")
+
+	multSize, _ := g.Metadata.Int("llama.feed_forward_length")
+	// tokenizerModel, _ := g.Metadata.String("tokenizer.ggml.model")
+	// fmt.Printf("tokenizerModel: %s\n", tokenizerModel)
+	// fmt.Printf("Context length: %d\n", ctxLength)
+	// // fmt.Printf("tokens: %d\n", reflect.TypeOf(tokens))
+	// fmt.Printf("multSize: %d\n", multSize)
+	// fmt.Printf("headCount: %d\n", headCount)
+	// fmt.Printf("kvHeadCount: %d\n", kvHeadCount)
+	// for k := range tokens {
+	// 	fmt.Printf("%s\n", k)
+	// }
+
 	tokensAny, err := g.Metadata.Any("tokenizer.ggml.tokens")
+	switch tt := tokensAny.(type) {
+	case []string:
+		fmt.Println("Tokens: ", tt[0])
+	default:
+		fmt.Println("[ERROR] Tokens are not a string array!")
+		os.Exit(1)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1859,25 +1900,16 @@ func LoadModelGGUF(
 	if err != nil {
 		return nil, err
 	}
-
-	multSize, _ := g.Metadata.Int("llama.feed_forward_length")
 	scores := scoresAny.([]float32)
-	fmt.Printf("Context length: %d\n", ctxLength)
-	// fmt.Printf("tokens: %d\n", reflect.TypeOf(tokens))
-	fmt.Println("type tokens: ", reflect.TypeOf(tokens))
-	fmt.Println("len tokens: ", len(tokens))
-	fmt.Println("type scores: ", reflect.TypeOf(scoresAny))
-	fmt.Println("len scores: ", len(scores))
-	fmt.Printf("multSize: %d\n", multSize)
-	fmt.Printf("vocabSize: %d\n", vocabSize)
-	fmt.Printf("headCount: %d\n", headCount)
-	fmt.Printf("kvHeadCount: %d\n", kvHeadCount)
-	// for k := range tokens {
-	// 	fmt.Printf("%s\n", k)
-	// }
 	model := lctx.Model
 	model.hparams.vocabSize = vocabSize
 	model.hparams.kvHeadsCount = uint32(kvHeadCount)
+
+	// fmt.Println("type tokens: ", reflect.TypeOf(tokens))
+	// fmt.Println("len tokens: ", len(tokens))
+	// fmt.Println("type scores: ", reflect.TypeOf(scoresAny))
+	// fmt.Println("len scores: ", len(scores))
+	// fmt.Printf("vocabSize: %d\n", vocabSize)
 	// model.hparams.embdSize = embdSize
 	// model.hparams.multSize = multSize
 	// model.hparams.headsCount = headsCount
@@ -1922,6 +1954,13 @@ func LoadModelGGUF(
 			BarEnd:        "[dark_gray]║[reset]",
 		}))
 
+	// default special tokens
+	// vocab.special_bos_id = 1;
+	// vocab.special_eos_id = 2;
+	// vocab.special_unk_id = 0;
+	// vocab.special_sep_id = -1;
+	// vocab.special_pad_id = -1;
+
 	for i := uint32(0); i < uint32(vocabSize); i++ {
 		if !silent && runtime.GOOS != "windows" && i%100 == 0 {
 			err = vocabBar.Set(int(i))
@@ -1933,6 +1972,9 @@ func LoadModelGGUF(
 		// fmt.Println("Score: ", scores[i])
 		vocab.Token2ID[tokens[i]] = i
 		vocab.ID2Token[i] = ml.TokenScore{Token: tokens[i], Score: scores[i]}
+	}
+	if vocabOnly {
+		return lctx, nil
 	}
 
 	// model := lctx.Model
