@@ -131,11 +131,11 @@ func main() {
 	}
 
 	// --- load the model
-	fmt.Println("\n[INFO] %d Starting load ")
+	fmt.Println("\n[INFO] Starting load ")
 
 	var ctx *llama.Context
 	if opts.FType == "ggjt" {
-		ctx, err = llama.LoadModel(params.model, opts.Silent)
+		ctx, err = llama.LoadModel(params.model, opts.Silent, false)
 		if err != nil {
 			_, err := llama.Colorize("\n[magenta][ ERROR ][white] Failed to load GGJT model [light_magenta]\"%s\"\n\n", params.model)
 			if err != nil {
@@ -145,7 +145,7 @@ func main() {
 		}
 	} else if opts.FType == "gguf" {
 		fmt.Printf("\n[INFO] %s Starting load ", opts.FType)
-		ctx, err = llama.LoadModelGGUF(params.model, opts.Silent)
+		ctx, err = llama.LoadModelGGUF(params.model, opts.Silent, false)
 		if err != nil {
 			_, err := llama.Colorize("\n[magenta][ ERROR ][white] Failed to load GGUF model [light_magenta]\"%s\"\n\n", params.model)
 			if err != nil {
@@ -154,7 +154,7 @@ func main() {
 			os.Exit(0)
 		}
 	} else {
-		fmt.Printf("\n[ERROR] invalid file type", opts.FType)
+		fmt.Println("\n[ERROR] invalid file type", opts.FType)
 		fmt.Printf("\n[ERROR] available types are [gguf, ggjt]")
 		os.Exit(1)
 	}
@@ -243,6 +243,7 @@ func main() {
 				lastNTokens = append(lastNTokens, id)
 
 			*/
+			fmt.Println("[INFO!!] LASTNTOKENS:::: ", lastNTokens)
 			id := llama.SampleTopPTopK(ctx,
 				lastNTokens, params.repeatLastN,
 				params.topK, params.topP, params.temp, params.repeatPenalty)
