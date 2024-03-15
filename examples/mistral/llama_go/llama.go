@@ -1457,7 +1457,7 @@ func LoadModelGGUF(
 	model.hparams.headsCount = uint32(headCount)
 	model.hparams.kvHeadsCount = uint32(kvHeadCount)
 	model.hparams.layersCount = uint32(layersCount)
-	model.hparams.rotCount = rotCount
+	model.hparams.rotCount = uint32(embdSize / headCount)
 	model.hparams.f16 = 1 // TODO: FIX THIS
 
 	dt := ml.TYPE_F32

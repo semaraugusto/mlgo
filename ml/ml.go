@@ -2800,12 +2800,30 @@ type TokenScore struct {
 type Vocab struct {
 	Token2ID map[string]uint32
 	ID2Token []TokenScore
+
+	SpecialBosID int
+	SpecialEosID int
+	SpecialUnkID int
+	SpecialSepID int
+	SpecialPadID int
+
+	SpecialAddBos int8 // -1 unknown, 1 add, 0 don't add
+	SpecialAddEos int8 // -1 unknown, 1 add, 0 don't add
 }
 
 func NewVocab(size uint32) *Vocab {
 	return &Vocab{
 		Token2ID: make(map[string]uint32, size),
 		ID2Token: make([]TokenScore, size, size),
+
+		SpecialBosID: 1,
+		SpecialEosID: 2,
+		SpecialUnkID: 0,
+		SpecialSepID: -1,
+		SpecialPadID: -1,
+
+		SpecialAddBos: -1,
+		SpecialAddEos: -1,
 	}
 }
 
@@ -2903,12 +2921,14 @@ func TryAddBigram(vocab *Vocab, symbols []Symbol, workQueue *[]Bigram, left, rig
 
 // void tokenize(const std::string & text, std::vector<llama_vocab::id> & output) {
 func Tokenize(vocab *Vocab, text string, bos bool) []uint32 {
+	// fmt.Println("[DEBUG] Start tokenizer")
 
 	output := make([]uint32, 0)
 	symbols := make([]Symbol, 0)   // std::vector<llama_sp_symbol> symbols_;
 	workQueue := make([]Bigram, 0) // llama_sp_bigram::queue work_queue_; // std::priority_queue<llama_sp_bigram, queue_storage, comparator>;
 
-	if bos {
+	if bos && (vocab.SpecialAddBos != -1) {
+		fmt.Println("[DEBUG] ADDING BOS")
 		output = append(output, 1) // TODO: replace with vocab.bos
 	}
 
@@ -2979,6 +2999,10 @@ func Tokenize(vocab *Vocab, text string, bos bool) []uint32 {
 			output = append(output, id)
 		}
 	}
+	// fmt.Printf("\n\n=== TOKENIZER ===\n\n%+v", output)
+	// for i := 0; i < len(output); i++ {
+	// 	fmt.Printf("%d:'%s'  ", output[i], Token2Str(vocab, output[i]))
+	// }
 
 	if DEBUG {
 		fmt.Printf("\n\n=== TOKENIZER ===\n\n%+v", output)
