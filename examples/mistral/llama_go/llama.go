@@ -700,14 +700,12 @@ func Eval(
 						pastCount, rotCount, 1),
 					0, 2, 1, 3)
 
-			repeated := ml.Repeat(ctx0, K,
-				ml.NewTensor4D(ctx0, ml.TYPE_F32 /* kv_self.v->typp */, K.NE[0], K.NE[1], Q.NE[2], K.NE[3]))
-			// debug("[info] reshape.shape:  (%v)", reshape.NE)
+			// // debug("[info] reshape.shape:  (%v)", reshape.NE)
 			// debug("[info] K.shape:        (%v)", K.NE)
 			// debug("[info] REPEATED.shape: (%v)", repeated.NE)
 			// debug("[info] Q.shape:        (%v)", Q.NE)
 
-			KQ := ml.MulMat(ctx0, repeated, Q)
+			KQ := ml.MulMat(ctx0, K, Q)
 			// debug("[info] KQ.shape:       (%v)", KQ.NE)
 			// fmt.Println(il, "K COMPUTING END-------------------------------")
 
@@ -748,15 +746,12 @@ func Eval(
 				// 			embdSize/headsCount, headsCount, pastCount+N),
 				// 		pastCount, rotCount, 1),
 				// 	0, 2, 1, 3)
-
-			VRepeated := ml.Repeat(ctx0, VTrans,
-				ml.NewTensor4D(ctx0, ml.TYPE_F32 /* kv_self.v->typp */, VTrans.NE[0], VTrans.NE[1], KQSoftMax.NE[2], VTrans.NE[3]))
-
 			// KQV = transpose(V) * KQ_soft_max
 			// debug("[info] VTrans.shape    (%v)", VTrans.NE)
 			// debug("[info] VTrans.shape    (%v)", VTrans.NE)
 			// debug("[info] KQSoftMax.shape (%v)", KQSoftMax.NE)
-			KQV := ml.MulMat(ctx0, VRepeated, KQSoftMax)
+			// KQV := ml.MulMat(ctx0, VRepeated, KQSoftMax)
+			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
 			// debug("[info] KQV.shape       (%v)", KQV.NE)
 			// fmt.Println(il, "KQV COMPUTING END-------------------------------")
 
@@ -1942,15 +1937,15 @@ func LoadModelGGUF(
 
 	// model := lctx.Model
 	nFf := ((2*(4*embdSize)/3 + multSize - 1) / multSize) * multSize
-	for i := 1; ; i++ {
-		nFf = ((2*(4*embdSize)/3 + i - 1) / i) * i
-		if nFf == 14336 {
-			fmt.Println("FOUND NFF: ", nFf)
-			fmt.Println("FOUND MULTSIZE: ", multSize)
-			break
-		}
-
-	}
+	// for i := 1; ; i++ {
+	// 	nFf = ((2*(4*embdSize)/3 + i - 1) / i) * i
+	// 	if nFf == 14336 {
+	// 		fmt.Println("FOUND NFF: ", nFf)
+	// 		fmt.Println("FOUND MULTSIZE: ", multSize)
+	// 		break
+	// 	}
+	//
+	// }
 	fmt.Println("FFN: ", nFf)
 	ctx := model.ctx
 
