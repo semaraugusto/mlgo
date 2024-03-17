@@ -33,15 +33,13 @@ const (
 	SPLIT_BY_ROWS    = 2
 )
 
-var (
-	// determine number of model parts based on the dimension
-	LLAMA_N_PARTS = map[uint32]int{
-		4096: 1,
-		5120: 2,
-		6656: 4,
-		8192: 8,
-	}
-)
+// determine number of model parts based on the dimension
+var LLAMA_N_PARTS = map[uint32]int{
+	4096: 1,
+	5120: 2,
+	6656: 4,
+	8192: 8,
+}
 
 type pair struct {
 	first  float32
@@ -81,7 +79,6 @@ type ContextParams struct {
 }
 
 type Layer struct {
-
 	// normalization
 	attentionNorm *ml.Tensor
 
@@ -211,13 +208,12 @@ func ResizeInplace(slice *[]float32, size int) {
 //
 
 func Eval(
-
 	lctx *Context,
 	tokens []uint32,
 	tokensCount uint32,
 	pastCount uint32,
-	threadsCount int) error {
-
+	threadsCount int,
+) error {
 	N := tokensCount
 	model := lctx.Model
 	kvSelf := model.kvSelf
@@ -235,7 +231,7 @@ func Eval(
 	debug("ctxSize: %d", ctxSize)
 	debug("numKVGroups: %d", numKVGroups)
 
-	ctx0 := &ml.Context{} //ctx0 := ml.Init(ml.InitParams{})
+	ctx0 := &ml.Context{} // ctx0 := ml.Init(ml.InitParams{})
 
 	graph := ml.Graph{ThreadsCount: threadsCount}
 
@@ -291,14 +287,13 @@ func Eval(
 				ml.BuildForwardExpand(&graph, ml.Copy(ctx0, Vcur, v))
 			}
 
-			Q :=
-				ml.Permute(ctx0,
-					ml.Rope(ctx0,
-						ml.Copy(ctx0,
-							Qcur,
-							ml.NewTensor3D(ctx0, ml.TYPE_F32, embdSize/headsCount, headsCount, N)),
-						pastCount, rotCount, 0),
-					0, 2, 1, 3)
+			Q := ml.Permute(ctx0,
+				ml.Rope(ctx0,
+					ml.Copy(ctx0,
+						Qcur,
+						ml.NewTensor3D(ctx0, ml.TYPE_F32, embdSize/headsCount, headsCount, N)),
+					pastCount, rotCount, 0),
+				0, 2, 1, 3)
 
 			// K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
 			viewNE0 := (pastCount + N) * cacheSize
@@ -315,20 +310,18 @@ func Eval(
 				view,
 				cacheNE0, cacheNE1, cacheNE2)
 
-			K :=
-				ml.Permute(ctx0,
-					ml.Rope(ctx0,
-						reshape,
-						pastCount, rotCount, 1),
-					0, 2, 1, 3)
+			K := ml.Permute(ctx0,
+				ml.Rope(ctx0,
+					reshape,
+					pastCount, rotCount, 1),
+				0, 2, 1, 3)
 
 			KQ := ml.MulMat(ctx0, K, Q)
 
-			KQScaled :=
-				ml.Scale(ctx0,
-					KQ,
-					ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
-				)
+			KQScaled := ml.Scale(ctx0,
+				KQ,
+				ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
+			)
 
 			// KQ_masked = mask_past(KQ_scaled)
 			////struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ_scaled, n_past);
@@ -339,14 +332,13 @@ func Eval(
 			KQSoftMax := ml.SoftMax(ctx0, KQMasked)
 
 			view = ml.View1D(ctx0, kvSelf.V, viewNE0, viewOffset)
-			VTrans :=
-				ml.Copy(ctx0,
-					ml.Permute(ctx0,
-						ml.Reshape3D(ctx0,
-							view,
-							cacheNE0, cacheNE1, cacheNE2),
-						1, 2, 0, 3),
-					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, cacheNE2, cacheNE0, cacheNE1))
+			VTrans := ml.Copy(ctx0,
+				ml.Permute(ctx0,
+					ml.Reshape3D(ctx0,
+						view,
+						cacheNE0, cacheNE1, cacheNE2),
+					1, 2, 0, 3),
+				ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, cacheNE2, cacheNE0, cacheNE1))
 
 			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
 			KQVMerged := ml.Permute(ctx0, KQV, 0, 2, 1, 3)
@@ -554,7 +546,6 @@ func SampleTopPTopK(
 	temp float32,
 	repeatPenalty float32,
 ) uint32 {
-
 	////auto & rng = lctx.rng;
 	////logitsCount := uint32(len(vocab.ID2Token))
 	logitsCount := lctx.Model.hparams.vocabSize
@@ -806,13 +797,12 @@ func SampleTopPTopK(
 //   - n_past:    the context size so far
 //   - n_threads: number of threads to use
 func ExpandGraph(
-
 	lctx *Context,
 	tokens []uint32,
 	tokensCount uint32,
 	pastCount uint32,
-	threadsCount int) (*ml.Graph, *ml.Context, error) {
-
+	threadsCount int,
+) (*ml.Graph, *ml.Context, error) {
 	N := tokensCount
 	model := lctx.Model
 	kvSelf := model.kvSelf
@@ -823,7 +813,7 @@ func ExpandGraph(
 	headsCount := model.hparams.headsCount
 	rotCount := model.hparams.embdSize / model.hparams.headsCount
 
-	ctx0 := &ml.Context{} //ctx0 := ml.Init(ml.InitParams{})
+	ctx0 := &ml.Context{} // ctx0 := ml.Init(ml.InitParams{})
 
 	// for big prompts, if BLAS is enabled, it is better to use only one thread
 	// otherwise, the threads are spin-lock waiting for the BLAS calls and are degrading the performance
@@ -880,37 +870,34 @@ func ExpandGraph(
 			}
 
 			// Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
-			Q :=
-				ml.Permute(ctx0,
-					ml.Rope(ctx0,
-						ml.Copy(ctx0,
-							Qcur,
-							ml.NewTensor3D(ctx0, ml.TYPE_F32, embdSize/headsCount, headsCount, N)),
-						pastCount, rotCount, 0),
-					0, 2, 1, 3)
+			Q := ml.Permute(ctx0,
+				ml.Rope(ctx0,
+					ml.Copy(ctx0,
+						Qcur,
+						ml.NewTensor3D(ctx0, ml.TYPE_F32, embdSize/headsCount, headsCount, N)),
+					pastCount, rotCount, 0),
+				0, 2, 1, 3)
 
 			// K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
-			K :=
-				ml.Permute(ctx0,
-					ml.Rope(ctx0,
-						ml.Reshape3D(ctx0,
-							////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
-							////n_embd/n_head, n_head, n_past + N),
-							ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
-							embdSize/headsCount, headsCount, pastCount+N),
-						pastCount, rotCount, 1),
-					0, 2, 1, 3)
+			K := ml.Permute(ctx0,
+				ml.Rope(ctx0,
+					ml.Reshape3D(ctx0,
+						////ggml_view_1d(ctx0, kv_self.k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(kv_self.k)*n_embd),
+						////n_embd/n_head, n_head, n_past + N),
+						ml.View1D(ctx0, kvSelf.K, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+						embdSize/headsCount, headsCount, pastCount+N),
+					pastCount, rotCount, 1),
+				0, 2, 1, 3)
 
 			// K * Q
 			////struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
 			KQ := ml.MulMat(ctx0, K, Q)
 
 			// KQ_scaled = KQ / sqrt(n_embd/n_head)
-			KQScaled :=
-				ml.Scale(ctx0,
-					KQ,
-					ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
-				)
+			KQScaled := ml.Scale(ctx0,
+				KQ,
+				ml.NewFP32(ctx0, float32(1.0/math.Sqrt(float64(embdSize)/float64(headsCount)))),
+			)
 
 			// KQ_masked = mask_past(KQ_scaled)
 			////struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ_scaled, n_past);
@@ -921,14 +908,13 @@ func ExpandGraph(
 			KQSoftMax := ml.SoftMax(ctx0, KQMasked)
 
 			// V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
-			VTrans :=
-				ml.Copy(ctx0,
-					ml.Permute(ctx0,
-						ml.Reshape3D(ctx0,
-							ml.View1D(ctx0, kvSelf.V, (pastCount+N)*embdSize, il*ctxSize*embdSize),
-							embdSize/headsCount, headsCount, pastCount+N),
-						1, 2, 0, 3),
-					ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, pastCount+N, embdSize/headsCount, headsCount))
+			VTrans := ml.Copy(ctx0,
+				ml.Permute(ctx0,
+					ml.Reshape3D(ctx0,
+						ml.View1D(ctx0, kvSelf.V, (pastCount+N)*embdSize, il*ctxSize*embdSize),
+						embdSize/headsCount, headsCount, pastCount+N),
+					1, 2, 0, 3),
+				ml.NewTensor3D(ctx0, ml.TYPE_F32 /* kv_self.v->type */, pastCount+N, embdSize/headsCount, headsCount))
 
 			// KQV = transpose(V) * KQ_soft_max
 			KQV := ml.MulMat(ctx0, VTrans, KQSoftMax)
@@ -1022,11 +1008,10 @@ func ExpandGraph(
 
 func LoadModel(
 	fileName string,
-	//partsCount int,
+	// partsCount int,
 	silent bool,
 	vocabOnly bool,
 ) (*Context, error) {
-
 	lctx := NewContext()
 
 	file, err := os.Open(fileName)
@@ -1079,7 +1064,7 @@ func LoadModel(
 	model.hparams.f16 = f16
 
 	// --- init cache
-	//KVCacheInit(&lctx.Model.hparams, &lctx.Model.kvSelf, ml.TYPE_F32)
+	// KVCacheInit(&lctx.Model.hparams, &lctx.Model.kvSelf, ml.TYPE_F32)
 	dt := ml.TYPE_F32
 	size := embdSize * layersCount * 512 /*ctxSize*/ // FIXME ctxSize
 	lctx.Model.kvSelf.K = ml.NewTensor1D(nil, dt, size)
@@ -1096,7 +1081,7 @@ func LoadModel(
 	vocab := lctx.Vocab
 
 	// FIXME Reserve extra space for tokensCount (N) = 8 (as with LogitsAll == true)
-	//lctx.Logits = make([]float32, vocabSize*8, vocabSize*8) // NewFloatSlice(vocabSize, vocabSize) // FIXME ASAP
+	// lctx.Logits = make([]float32, vocabSize*8, vocabSize*8) // NewFloatSlice(vocabSize, vocabSize) // FIXME ASAP
 	lctx.Logits = make([]float32, vocabSize, vocabSize) // use just vocab size as CPP version does by default
 
 	if ml.DEBUG {
@@ -1109,8 +1094,8 @@ func LoadModel(
 		fmt.Printf("\nf16    = %d", f16)
 	}
 
-	//fmt.Printf("\nctx   = %d", hparamsCtx)
-	//fmt.Printf("\nn_ff    = %d", n_ff)
+	// fmt.Printf("\nctx   = %d", hparamsCtx)
+	// fmt.Printf("\nn_ff    = %d", n_ff)
 
 	n_ff := ((2*(4*embdSize)/3 + multSize - 1) / multSize) * multSize
 
@@ -1123,7 +1108,7 @@ func LoadModel(
 	vocabBar := progressbar.NewOptions(
 		int(vocabSize),
 		progressbar.OptionFullWidth(),
-		//progressbar.OptionSetWidth(40),
+		// progressbar.OptionSetWidth(40),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetPredictTime(false),
 		progressbar.OptionSetElapsedTime(false),
@@ -1175,7 +1160,7 @@ func LoadModel(
 
 		model.layers = make([]Layer, layersCount)
 		for i := uint32(0); i < layersCount; i++ {
-			//auto & layer = model.layers[i];
+			// auto & layer = model.layers[i];
 
 			model.layers[i].attentionNorm = ml.NewTensor1D(ctx, ml.TYPE_F32, embdSize)
 
@@ -1215,7 +1200,7 @@ func LoadModel(
 	// https://pkg.go.dev/github.com/schollz/progressbar/v3#Option
 	bar := progressbar.NewOptions(int(layersCount*9),
 		progressbar.OptionFullWidth(),
-		//progressbar.OptionSetWidth(40),
+		// progressbar.OptionSetWidth(40),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionSetPredictTime(false),
 		progressbar.OptionSetElapsedTime(false),
@@ -1308,7 +1293,7 @@ func LoadModel(
 			fakeHeader.Len = int(tensorSize * 4)
 			fakeHeader.Cap = int(tensorSize * 4)
 
-			//fmt.Printf("\n== FAKE []BYTE LEN = %d", len(fake))
+			// fmt.Printf("\n== FAKE []BYTE LEN = %d", len(fake))
 			if count, err := io.ReadFull(file, fake); err != nil || count != int(tensorSize*4) {
 				fmt.Printf("\n[ERROR] Failed to read BIG FP32 chunk from model!")
 				fmt.Printf("\n[ERROR] COUNT = %d | ERR = %s", count, err.Error())
@@ -1340,7 +1325,6 @@ func loadTensor(
 	ggufReader, err := ggufTensor.Reader()
 	fileReader := ggufReader.(*os.File)
 	if err != nil {
-
 		return fmt.Errorf("could not find tensor for %s", ggufTensor.Name)
 		// Do something
 	}
@@ -1469,7 +1453,7 @@ func LoadModelGGUF(
 	vocab := lctx.Vocab
 
 	// FIXME Reserve extra space for tokensCount (N) = 8 (as with LogitsAll == true)
-	//lctx.Logits = make([]float32, vocabSize*8, vocabSize*8) // NewFloatSlice(vocabSize, vocabSize) // FIXME ASAP
+	// lctx.Logits = make([]float32, vocabSize*8, vocabSize*8) // NewFloatSlice(vocabSize, vocabSize) // FIXME ASAP
 	lctx.Logits = make([]float32, vocabSize, vocabSize) // use just vocab size as CPP version does by default
 
 	vocabBar := progressbar.NewOptions(
@@ -1622,6 +1606,15 @@ func max(a, b float32) float32 {
 }
 
 // NB! INT = 32 bits
+func readUInt(file *os.File) uint32 {
+	buf := make([]byte, 4)
+	if count, err := file.Read(buf); err != nil || count != 4 {
+		return 0
+	}
+	return uint32(buf[3])<<24 | uint32(buf[2])<<16 | uint32(buf[1])<<8 | uint32(buf[0])
+}
+
+// NB! INT = 32 bits
 func readInt(file *os.File) uint32 {
 	buf := make([]byte, 4)
 	if count, err := file.Read(buf); err != nil || count != 4 {
@@ -1647,6 +1640,7 @@ func safeReadFP16ToFP32(file *os.File) (float32, error) {
 	f16 := float16.Frombits(bits)
 	return f16.Float32(), nil
 }
+
 func readFP16ToFP32(file *os.File) float32 {
 	buf := make([]byte, 2)
 	if count, err := file.Read(buf); err != nil || count != 2 {
@@ -1677,6 +1671,6 @@ func ExtractTokens(r *ring.Ring, count int) []uint32 {
 }
 
 func Colorize(format string, opts ...interface{}) (n int, err error) {
-	var DefaultOutput = colorable.NewColorableStdout()
+	DefaultOutput := colorable.NewColorableStdout()
 	return fmt.Fprintf(DefaultOutput, colorstring.Color(format), opts...)
 }

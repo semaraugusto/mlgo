@@ -91,16 +91,9 @@ func TestTokenizerGGUF(t *testing.T) {
 			fmt.Printf("Expected %v, got %v\n", tokenID, expected[i])
 			t.Errorf("Expected %v, got %v\n", tokenID, expected[i])
 		}
-		// s := asciiToString(tokenStr)
-		// fmt.Println("tokenID: ", tokenID, " Token: ", tokenStr, "converted: ", s)
 		fmt.Println("tokenID: ", tokenID, " Token: ", tokenStr)
 		output += tokenStr
 	}
-	// if expected != output {
-	// 	// t.Errorf("Expected %s, got %s", expected, output)
-	// 	fmt.Printf("Expected %s, got %s\n", expected, output)
-	// 	t.Errorf("Expected %s, got %s\n", expected, output)
-	// }
 }
 
 func TestTokenizerBin(t *testing.T) {
